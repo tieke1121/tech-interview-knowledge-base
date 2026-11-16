@@ -101,6 +101,26 @@ def verify_tech_doc(file_path: Path, content: str, fm: dict):
         sec_pattern = re.escape(sec.split(" ")[0]) + r"\s*" + re.escape(sec.split(" ", 1)[1])
         if not re.search(sec_pattern, content):
             warnings.append(f"缺少核心规范段落: '{sec}'")
+
+    # 深度检查: 验证第8节真题与第9节解题答案的 100% 对应性
+    sec8_match = re.search(r"## 8\.\s*互联网大厂高频面试真题库(.*?)(?=## 9\.|$)", content, re.DOTALL)
+    sec9_match = re.search(r"## 9\.\s*结构化深度参考答案(.*?)(?=## 10\.|$)", content, re.DOTALL)
+    
+    if sec8_match and sec9_match:
+        sec8_text = sec8_match.group(1)
+        sec9_text = sec9_match.group(1)
+        
+        # 统计 Q1, Q2, Q3... 的出现次数
+        q_list = re.findall(r"\*\*Q(\d+)\*\*", sec8_text)
+        # 统计第9节中 '### 题目' 的解答块
+        ans_list = re.findall(r"###\s*题目(\d+)", sec9_text)
+        
+        if len(q_list) > 0 and len(ans_list) < len(q_list):
+            warnings.append(f"真题答案覆盖不全: 第8节列出 {len(q_list)} 道真题，但第9节仅解答了 {len(ans_list)} 道 (必须题题有解)")
+            
+        # 抽样检查第9节是否包含三层结构
+        if "#### 简洁回答" not in sec9_text or "#### 深入回答" not in sec9_text:
+            warnings.append("第9节答案缺少标准三层回答结构 (必须包含简洁回答、深入回答与架构师视角)")
             
     return warnings
 
