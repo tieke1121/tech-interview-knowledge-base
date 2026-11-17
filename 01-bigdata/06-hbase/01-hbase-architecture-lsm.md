@@ -4,12 +4,13 @@ title: "HBase存储架构与LSM-Tree：底层读写链路、Compaction机制、R
 module: "01-bigdata"
 category: "06-hbase"
 version_target: "Apache HBase 2.5+ / 2.6+ / 3.0"
-status: "学习中"
+doc_status: "已完成"
+learning_status: "未学习"
+status: "未学习"
 importance: "P0"
 last_reviewed: "2026-11-17"
 tags: ["大数据", "分布式存储", "NoSQL", "HBase", "LSM-Tree", "架构设计", "生产排障"]
 ---
-
 # HBase存储架构与LSM-Tree：底层读写链路、Compaction机制、RowKey设计与延迟治理
 
 > **学习目标定位**：面向技术总监、数据平台研发负责人、高级数据架构师岗位，系统掌握 Apache HBase 存储内核、LSM-Tree 状态流转、读写多级缓存协同、Compaction 治理解耦与高并发 RowKey 防热点设计。结合互联网大厂高频面试真题与百万级 QPS 生产场景，建立针对 P99 延迟毛刺、Region Too Busy 阻断、RSGroup 物理隔离与冷热分级存储成本 ROI 的全景把控能力。

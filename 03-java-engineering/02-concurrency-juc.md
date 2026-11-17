@@ -4,12 +4,13 @@ title: "Java并发编程与JUC核心机制：AQS同步状态机、锁升级、�
 module: "03-java-engineering"
 category: "02-concurrency-juc"
 version_target: "Java 17 LTS / Java 21 LTS (JUC Concurrency Framework)"
-status: "学习中"
+doc_status: "已完成"
+learning_status: "未学习"
+status: "未学习"
 importance: "P0"
 last_reviewed: "2026-11-17"
 tags: ["Java并发", "JUC", "AQS", "锁升级", "线程池", "CompletableFuture", "生产排障", "技术管理"]
 ---
-
 # Java并发编程与JUC核心机制：AQS同步状态机、锁升级、动态线程池与异步编排
 
 > **学习目标定位**：面向技术总监、数据平台研发负责人、高级数据架构师岗位，系统掌握 Java 并发编程与 JUC（`java.util.concurrent`）架构体系的底层物理机制与系统工程设计。深入剖析 Doug Lea 大师设计的 AQS（AbstractQueuedSynchronizer）同步状态机流转与双向 CLH 队列拓扑、JVM `synchronized` 锁升级（从无锁、轻量级 CAS 自旋到 ObjectMonitor 重量级膨胀）及其在现代 JDK 废弃偏向锁的深层根因、ThreadPoolExecutor 状态机 `ctl` 压缩编码与任务提交流转模型、CompletableFuture 异步编排与响应式执行树、CPU 缓存伪共享（False Sharing）与 `@Contended` 填充优化。结合高并发网关动态线程池热调整与线上线程池打满雪崩真实排障，建立兼具微观指令级洞察与宏观高可用管控的技术领导力。

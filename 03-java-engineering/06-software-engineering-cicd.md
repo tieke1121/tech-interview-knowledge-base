@@ -4,12 +4,13 @@ title: "软件工程质量体系与 CI/CD 落地"
 module: "03-java-engineering"
 category: "06-software-engineering-cicd"
 version_target: "GitLab CI 16+, Docker 26+, Kubernetes 1.29+, SonarQube 10+, Testcontainers 1.19+"
-status: "学习中"
+doc_status: "已完成"
+learning_status: "未学习"
+status: "未学习"
 importance: "P0"
 last_reviewed: "2026-11-17"
 tags: ["Java工程底座", "软件工程", "代码质量门禁", "测试金字塔", "CI/CD流水线", "金丝雀发布", "DORA效能指标"]
 ---
-
 # 软件工程质量体系与 CI/CD 落地
 
 > **学习目标定位**：面向技术总监、数据平台研发负责人、高级数据架构师岗位，系统构建现代化企业级软件工程质量保证与云原生持续交付（CI/CD）体系。彻底攻克 SOLID 原则、DDD 领域驱动架构治理、SonarQube 自动化质量门禁、Testcontainers 真实集成测试与金丝雀渐进式灰度发布。深度融合思科、Zoom、美的集团及瑞纳智能大型工业中台实战，提炼 DORA 研发效能度量模型、技术债务量化治理与防腐层设计的降维管理表达能力。

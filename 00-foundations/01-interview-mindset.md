@@ -3,12 +3,13 @@ id: "foundations-interview-mindset"
 title: "技术管理面试心法与三层表达模型"
 module: "00-foundations"
 category: "mindset"
-status: "学习中"
+doc_status: "已完成"
+learning_status: "未学习"
+status: "未学习"
 importance: "P0"
 last_reviewed: "2026-11-16"
 tags: ["面试心法", "表达模型", "管理思维", "架构取舍"]
 ---
-
 # 技术管理面试心法与三层表达模型
 
 > **核心目标**：帮助拥有14年研发和管理背景的资深专家，打破“技术细节回忆不起导致心虚”或“只讲管理空话缺乏技术说服力”的常见误区，建立沉着、有深度、成体系的技术领导者面试表达风格。
@@ -54,7 +55,7 @@ flowchart TD
     subgraph Level2["第二层: 深入回答 (硬核实力展开)"]
         L2["底层细节: 数据结构 + 状态流转 + 源码模块 + 边界条件"]
     end
-    subgraph Level3["第三层: 架构师/管理视角 (高维降维打击)"]
+    subgraph Level3["第三层: 架构师/管理视角 (高维战略与商业视野)"]
         L3["全局视野: 技术选型权衡 + 成本ROI + 高可用多租户 + 团队落地"]
     end
     Level1 --> Level2 --> Level3

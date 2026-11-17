@@ -4,12 +4,13 @@ title: "Skills 设计与 MCP 协议标准体系"
 module: "06-ai-agent"
 category: "ai-agent-protocol"
 version_target: "Model Context Protocol (MCP) 2024 Spec, JSON-RPC 2.0, SSE / Stdio Transport"
-status: "学习中"
+doc_status: "已完成"
+learning_status: "未学习"
+status: "未学习"
 importance: "P0"
 last_reviewed: "2026-11-17"
 tags: ["AI Agent", "MCP协议", "Skills设计", "Model Context Protocol", "工具抽象", "安全沙箱", "JSON-RPC"]
 ---
-
 # Skills 设计与 MCP 协议标准体系
 
 > **架构师视角定位**：本模块聚焦 AI 智能体（AI Agent）跨生态能力扩展的核心标准协议 —— Anthropic 主导并迅速成为行业事实标准的 **MCP（Model Context Protocol，模型上下文协议）** 与模块化 **Skills 设计体系**。全面拆解从 MCP Client/Server 双向架构、JSON-RPC 2.0 报文规范、三大核心原语（Resources、Prompts、Tools），到 Stdio 管道隔离、SSE 远程传输、工具上下文动态注水（Dynamic Context Hydration）与多层安全沙箱防护。结合大数据平台智能运维（BigData DataOps Server）与工业物联网高危设备安全受控场景，为技术总监、数据平台研发负责人与高级架构师构建一套解耦模型底座与物理世界系统、杜绝接口 $M \times N$ 网状耦合的企业级开放工具协议标准。

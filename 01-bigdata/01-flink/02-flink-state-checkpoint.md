@@ -4,12 +4,13 @@ title: "Flink 状态管理、Checkpoint容错与端到端Exactly-Once（高阶�
 module: "01-bigdata"
 category: "01-flink"
 version_target: "Apache Flink 1.19+ / 2.0"
-status: "学习中"
+doc_status: "已完成"
+learning_status: "未学习"
+status: "未学习"
 importance: "P0"
 last_reviewed: "2026-11-16"
 tags: ["大数据", "Flink", "状态管理", "Checkpoint", "Exactly-Once", "两阶段提交", "生产排障", "技术管理"]
 ---
-
 # Flink 状态管理、Checkpoint容错与端到端Exactly-Once（高阶架构与生产实战）
 
 > **学习目标定位**：面向数据平台研发负责人、大数据架构师与技术总监岗位，深刻掌握 Flink 托管状态（Managed State）的存储模型、StateBackend 演进（HashMap vs RocksDB vs Changelog vs 存算分离）、异步屏障快照（ABS）算法及基于两阶段提交（2PC）的端到端 Exactly-Once 机制。结合字节跳动、美团等互联网大厂真实高频面试场景，系统掌握大促状态暴涨治理、Checkpoint 超时雪崩排查及“强一致延迟 vs 幂等最终一致”的架构权衡。

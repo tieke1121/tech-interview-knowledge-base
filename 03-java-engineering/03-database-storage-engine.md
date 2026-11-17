@@ -4,12 +4,13 @@ title: "数据库底层与 PostgreSQL/MySQL 事务"
 module: "03-java-engineering"
 category: "03-database-storage-engine"
 version_target: "MySQL 8.0+ / 8.4 LTS, PostgreSQL 16+ / 17"
-status: "学习中"
+doc_status: "已完成"
+learning_status: "未学习"
+status: "未学习"
 importance: "P0"
 last_reviewed: "2026-11-17"
 tags: ["Java工程底座", "数据库存储引擎", "MVCC", "WAL", "B+Tree", "锁机制", "高可用架构", "生产排障"]
 ---
-
 # 数据库底层与 PostgreSQL/MySQL 事务
 
 > **学习目标定位**：面向技术总监、数据平台研发负责人、高级数据架构师岗位，深入攻克关系型数据库存储引擎的底层物理存储、内存缓冲、事务隔离与并发控制本质。彻底讲透 MySQL InnoDB 与 PostgreSQL 在 MVCC、WAL、锁体系、B+Tree 索引分裂及两阶段提交（2PC）上的运行机制与哲学差异。结合千亿级 IoT 数据入库、智慧供热实时交易与报表分析等真实生产场景，建立死锁排查、长事务治理、在线 DDL 变更及分库分表架构设计的全链路决策与管理管控能力。

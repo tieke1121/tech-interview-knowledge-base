@@ -3,12 +3,13 @@ id: "mgmt-productivity-tech-debt"
 title: "研发效能度量与技术债务治理"
 module: "04-tech-management"
 category: "engineering-productivity"
-status: "学习中"
+doc_status: "已完成"
+learning_status: "未学习"
+status: "未学习"
 importance: "P0"
 last_reviewed: "2026-11-17"
 tags: ["技术管理", "研发效能度量", "DORA指标", "SPACE框架", "技术债务治理", "重构ROI", "价值流分析"]
 ---
-
 # 研发效能度量与技术债务治理
 
 > **管理维度定位**：本模块聚焦技术总监、数据平台研发负责人、大数据研发经理在研发效能评估与系统长期健康度管控上的核心战略抓手。全面拆解 DORA 四大黄金指标体系、SPACE 研发效能框架、价值流图谱（Value Stream Mapping, VSM）瓶颈定位法，以及技术债务（Technical Debt）的显性化量化评估与“20% 债务配额制”。深度融合美的集团、思科、Zoom 及瑞纳智能工业数据中台实操，提炼技术高管将底层工程治理转化为商业语言、向上汇报可量化 ROI、化解业务与技术资源冲突的高维领导力格局。

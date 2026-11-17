@@ -4,12 +4,13 @@ title: "Apache Paimon与Apache Hudi：实时流式湖仓双雄、LSM湖存储、
 module: "01-bigdata"
 category: "08-doris-lakehouse"
 version_target: "Apache Paimon 0.8+ / 1.0 & Apache Hudi 0.15+ / 1.0"
-status: "学习中"
+doc_status: "已完成"
+learning_status: "未学习"
+status: "未学习"
 importance: "P0"
 last_reviewed: "2026-11-17"
 tags: ["大数据", "数据湖", "Lakehouse", "Apache Paimon", "Apache Hudi", "LSM-Tree", "流批一体", "Changelog"]
 ---
-
 # Apache Paimon与Apache Hudi：实时流式湖仓双雄、LSM湖存储、Changelog生成与湖仓流批一体
 
 > **学习目标定位**：面向技术总监、数据平台研发负责人、高级数据架构师岗位，系统掌握现代实时流式数据湖（Streaming Lakehouse）的双雄内核——**Apache Paimon** 与 **Apache Hudi** 的底层设计哲学。深入剖析 Paimon 的 LSM-Tree 湖存储分层结构、零索引负担设计、四大 Changelog 生成模式（None / Input / File-lookup / Lookup）、Partial-Update 零状态多流拼表机制，以及 Hudi 的 Timeline 元数据状态机与索引开销演进。结合互联网大厂高频面试真题与千万级流式入湖实战，建立针对 Checkpoint 超时治理、写入与 Compaction 物理分离、替代中间层 Kafka 与全链路湖仓一体架构落地的技术管理领导力。

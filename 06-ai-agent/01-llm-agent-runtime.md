@@ -4,12 +4,13 @@ title: "LLM 底层原理与 Agent 核心运行机制"
 module: "06-ai-agent"
 category: "ai-agent-core"
 version_target: "Transformer, GPT-4o, Claude 3.5 Sonnet, Gemini 1.5 Pro, DeepSeek-V2.5/V3"
-status: "学习中"
+doc_status: "已完成"
+learning_status: "未学习"
+status: "未学习"
 importance: "P0"
 last_reviewed: "2026-11-17"
 tags: ["AI Agent", "LLM底层", "Transformer", "KV Cache", "Function Calling", "ReAct循环", "反思机制", "上下文工程"]
 ---
-
 # LLM 底层原理与 Agent 核心运行机制
 
 > **架构师视角定位**：本模块聚焦大语言模型（LLM）的底层计算原理与自主智能体（AI Agent）的核心运行时架构。全面剖析从 Transformer 自注意力机制、因果掩码、KV Cache 显存优化、上下文窗口（Context Window）衰减规律，到 Function Calling 工具调用契约、ReAct（Reasoning + Acting）自主决策循环、自我反思（Self-Reflection）状态机与确定性工程护栏（Guardrails）。结合大数据智能运维（DataOps）、Text-to-SQL 复杂业务决策与海量日志自愈场景，为技术总监、数据平台研发负责人与高级架构师构建从底层数学推导、模型推理优化到企业级生产系统落地的全栈 AI-Native 架构方法论。

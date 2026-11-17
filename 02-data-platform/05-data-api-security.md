@@ -4,12 +4,13 @@ title: "数据服务API与多租户权限体系：Data API网关动态生成、�
 module: "02-data-platform"
 category: "05-data-api-security"
 version_target: "Data API Gateway 2.0 / Apache Ranger 2.4+ / RBAC & ABAC"
-status: "学习中"
+doc_status: "已完成"
+learning_status: "未学习"
+status: "未学习"
 importance: "P0"
 last_reviewed: "2026-11-17"
 tags: ["数据服务", "Data API", "Apache Ranger", "动态脱敏", "行级权限", "技术管理", "架构设计"]
 ---
-
 # 数据服务API与多租户权限体系：Data API网关动态生成、高并发缓存限流、Apache Ranger细粒度管控与动态脱敏
 
 > **学习目标定位**：面向技术总监、数据平台研发负责人、高级数据架构师岗位，系统掌握中台从“数据资产化”向“资产服务化（Data-as-a-Service - DaaS）”跃迁的架构设计与企业级多租户安全防护体系。深度剖析统一 Data API 网关的动态 SQL 编译生成引擎、多级缓存（Caffeine 本地堆 + 分布式 Redis）与自适应令牌桶限流防雪崩机制；深入推导 Apache Ranger 插件化（Plugin）架构在计算引擎内部基于抽象语法树（AST）实现纳秒级行级过滤（Row-Level Filter）与动态列掩码脱敏（Column Masking）的改写内核。结合大型制造（美的）跨部门数据开放与工业物联网（瑞纳智能太原项目）10 万设备多租户行级数据隔离与等保合规实战，建立打通高性能服务化与严谨数据安全防御的高维技术领导力。

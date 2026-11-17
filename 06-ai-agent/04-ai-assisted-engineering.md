@@ -4,12 +4,13 @@ title: "AI 辅助研发工作流与工程实践"
 module: "06-ai-agent"
 category: "ai-native-engineering"
 version_target: "Codex, Antigravity, Claude Code, Cursor, Spec-Driven Development, Testcontainers"
-status: "学习中"
+doc_status: "已完成"
+learning_status: "未学习"
+status: "未学习"
 importance: "P0"
 last_reviewed: "2026-11-17"
 tags: ["AI辅助研发", "AI-Native", "Antigravity", "Codex", "Spec驱动开发", "CodeReview", "单元测试生成", "研发效能"]
 ---
-
 # AI 辅助研发工作流与工程实践
 
 > **架构师视角定位**：本模块聚焦软件工程在人工智能时代的重大范式变迁 —— 从简单的 Copilot 代码行级自动补全，跃升为以自主智能体（Agentic IDE / CLI 如 Antigravity, Codex, Cursor）为核心的 **AI-Native 研发工程流与规范驱动开发（Spec-Driven Development, SDD）**。全面拆解从基于 Repo Map 的全工程上下文感知、AST 语法树精准修剪、自动化单元测试与变异测试（Mutation Testing）、AI 辅助 Code Review 三层门禁，到防范并发死锁/内存泄漏的生成代码安全沙箱、开源知识产权合规，以及技术团队从传统开发向人机协同（Centaur Developer）的组织效能升级。结合太原智慧供热中台与大型分布式微服务从 0 到 1 快速重构交付实战，为技术总监、数据平台研发负责人与高级架构师构建一套既能成倍释放研发人效、又能坚守企业级工程质量底线的现代软件工程方法论。

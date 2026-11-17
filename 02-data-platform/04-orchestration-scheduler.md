@@ -4,12 +4,13 @@ title: "任务调度系统与大数据组件管理：Apache DolphinScheduler去�
 module: "02-data-platform"
 category: "04-orchestration-scheduler"
 version_target: "Apache DolphinScheduler 3.2+ / Airflow 2.8+ / Cloud-Native Orchestration"
-status: "学习中"
+doc_status: "已完成"
+learning_status: "未学习"
+status: "未学习"
 importance: "P0"
 last_reviewed: "2026-11-17"
 tags: ["任务调度", "DolphinScheduler", "DAG拓扑", "分布式容错", "架构设计", "生产排障", "技术管理"]
 ---
-
 # 任务调度系统与大数据组件管理：Apache DolphinScheduler去中心化架构、DAG拓扑执行流、容错机制与高并发调度
 
 > **学习目标定位**：面向技术总监、数据平台研发负责人、高级数据架构师岗位，系统掌握企业级分布式工作流调度系统（Distributed Workflow Orchestrator）的底层内核架构、分布式协同机制与超大规模高并发调度治理方案。深度剖析 Apache DolphinScheduler 3.x 去中心化设计哲学（Multi-Master / Multi-Worker 无主协同）、基于 Kahn 拓扑排序算法的 DAG 依赖解析与环路死锁检测、基于 ZooKeeper/Etcd 临时租约的 Master/Worker 双向故障转移（Failover）容错时序。结合大型制造（美的）万级批处理 DAG 依赖治理与工业物联网（瑞纳智能太原项目）10 万设备小时级重算补数实战，讲透多租户资源防踩踏隔离、动态智能基线预警与任务生命周期 SOP 门禁。

@@ -4,12 +4,13 @@ title: "Apache Doris实时OLAP架构：FE/BE极简拓扑、三大数据模型、
 module: "01-bigdata"
 category: "08-doris-lakehouse"
 version_target: "Apache Doris 2.0+ / 2.1+ / 3.0"
-status: "学习中"
+doc_status: "已完成"
+learning_status: "未学习"
+status: "未学习"
 importance: "P0"
 last_reviewed: "2026-11-17"
 tags: ["大数据", "实时OLAP", "Apache Doris", "MPP", "向量化引擎", "湖仓一体", "架构设计"]
 ---
-
 # Apache Doris实时OLAP架构：FE/BE极简拓扑、三大数据模型、向量化Pipeline引擎与湖仓加速实战
 
 > **学习目标定位**：面向技术总监、数据平台研发负责人、高级数据架构师岗位，系统掌握现代化实时 MPP 分析型数据库 Apache Doris 的底层架构设计哲学。深入剖析 FE/BE 极简双进程无外部依赖拓扑、三大数据模型（Duplicate/Aggregate/Unique）及 Merge-on-Write 写时合并演进、Pipeline 向量化执行引擎微架构、实时写入 2PC 事务流转与跨源湖仓统一 Catalog 加速。结合互联网大厂高频面试真题与超大规模集群实战，建立针对 -235 版本爆发治理、Runtime Filter 广播过滤、Workload Group 资源隔离与 ClickHouse 架构迁移选型的降维把控与技术管理领导力。
@@ -585,7 +586,7 @@ flowchart TD
 >    - Doris 设计了 `runtime_filter_wait_time_ms`（默认 1000ms）。如果大表已经准备好扫描而过滤器的 RPC 尚未到达，系统会自动放弃等待直接启动扫描，避免因小表构建过慢拖垮整体查询。”
 
 #### 架构师/技术管理视角（降维升华、权衡取舍、SLA与成本）：
-> “在技术管理与大促保障体系中，**Runtime Filter 是解决分布式 Join 性能短板的‘核武器’**：
+> “在技术管理与大促保障体系中，**Runtime Filter 是解决分布式 Join 性能短板的‘关键利器’**：
 > 在传统分布式系统中，开发人员经常抱怨‘分布式 Join 太慢，不敢 Join’，进而催生了大量在宽表中拼命冗余字段的病态设计，导致数据冗余和维护成本飙升。
 > 架构师通过调优 Runtime Filter 参数（如调大 `runtime_filter_wait_time_ms` 到合理值、针对超大集群开启 `runtime_filter_type = IN,BLOOM_FILTER`），可以让星型模型（Star Schema）和雪花模型（Snowflake Schema）在数仓中跑出接近大宽表的极致性能。
 > 这不仅**解放了上游数仓建模团队的维护负担**，更将跨集群网络交换机的吞吐带宽压力削减了 70%，展现出高超的架构平衡与治理智慧。”
@@ -670,7 +671,7 @@ flowchart TD
 >    - Doris 的 CBO 优化器会自动命中物化视图，将 `COUNT(DISTINCT)` 智能透明改写为 `BITMAP_UNION_COUNT`，业务开发无感知享受亚毫秒级响应。”
 
 #### 架构师/技术管理视角（降维升华、权衡取舍、SLA与成本）：
-> “在技术架构演进与大屏保障中，**‘用位运算降维打击传统代数运算’是高级架构师的标志性技能**：
+> “在技术架构演进与大屏保障中，**‘用位运算替代传统代数运算优化性能’是高级架构师的标志性技能**：
 > 很多初级架构师在遇到大促 UV 统计慢的问题时，第一反应是给 Spark/Doris 集群疯狂加 CPU 和内存，结果成本上去了延迟依然无法收敛到 1 秒内。
 > Roaring Bitmap 方案将计算复杂度由 $O(N \log N)$ 的分布式排序降维至 $O(1)$ 的 CPU 位级指令；
 > 在我们主导的电商大促与物联网大屏实践中：

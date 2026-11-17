@@ -4,12 +4,13 @@ title: "RAG 架构设计与向量检索实战"
 module: "06-ai-agent"
 category: "ai-agent-rag"
 version_target: "Milvus 2.4+, Pgvector 0.7+, BGE-M3, BGE-Reranker-Large, GraphRAG"
-status: "学习中"
+doc_status: "已完成"
+learning_status: "未学习"
+status: "未学习"
 importance: "P0"
 last_reviewed: "2026-11-17"
 tags: ["RAG", "向量检索", "Embedding", "Chunking", "Milvus", "Pgvector", "混合检索", "Re-ranking", "GraphRAG"]
 ---
-
 # RAG 架构设计与向量检索实战
 
 > **架构师视角定位**：本模块聚焦大语言模型在企业私有域落地最关键的护城河技术 —— **检索增强生成（RAG, Retrieval-Augmented Generation）与高性能向量检索架构**。系统拆解从非结构化多源数据摄取、基于语义与语法的自适应分块（Chunking）、稠密向量（Dense）与稀疏关键词（BM25/Sparse）混合检索、倒数排名融合（RRF）、交叉编码器（Cross-Encoder）重排序，到 HNSW 索引图算法底层数学推导、GraphRAG 全局拓扑社区发现，以及生产级 RAG 评估三元组（Context Relevance, Faithfulness, Answer Relevance）。结合工业互联网与大数据平台海量排障文档、SQL 元数据治理与太原供热管网复杂技术图谱实战，为技术总监、数据平台研发负责人与高级架构师构建一套高召回、低幻觉、低延迟的企业级 RAG 生产架构方法论。
@@ -540,7 +541,7 @@ flowchart TD
 >      - 全链路总延迟控制在 60 毫秒以内，而最终呈现给大模型的 Top-5 精确度与全库深度重排完全持平。”
 
 #### 架构师/技术管理视角（业务 ROI、安全隔离、成本预算、多模型路由策略）
-> “从系统延迟与商业 ROI 的维度审视，**‘粗筛 + 精排’是整个计算机工程界数十年来沉淀下来的最经典、最无懈可击的系统设计模式**（从高并发推荐系统搜索流，到现代 RAG 架构一脉相承）。
+> “从系统延迟与商业 ROI 的维度审视，**‘粗筛 + 精排’是整个计算机工程界数十年来沉淀下来的最经典、最成熟可靠的系统设计模式**（从高并发推荐系统搜索流，到现代 RAG 架构一脉相承）。
 > 生产落地准则：
 > 很多初级工程师为了追求极低延迟，省去了重排阶段，导致大模型经常收到一堆相似度很高但逻辑毫无关联的‘语义废话’；或者为了追求精度，把上百个候选片段全扔给大模型让其自行判断，导致 API 成本暴涨且触发 Lost in the Middle 幻觉。
 > 引入一个轻量级的开源本地 Reranker（如 BGE-Reranker-Large），用极微小的本地 GPU 计算开销，换取终端大模型输入 Token 数量下降 80%，并使最终问答准召率提升 25% 以上，这是工业级架构设计最精妙的 ROI 权衡。”

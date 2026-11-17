@@ -4,12 +4,13 @@ title: "Kafka 核心运行架构、高吞吐底层设计与分区一致性模型
 module: "01-bigdata"
 category: "02-kafka"
 version_target: "Apache Kafka 3.6+ / 3.7+ (KRaft 架构)"
-status: "学习中"
+doc_status: "已完成"
+learning_status: "未学习"
+status: "未学习"
 importance: "P0"
 last_reviewed: "2026-11-16"
 tags: ["大数据", "Kafka", "高吞吐", "零拷贝", "PageCache", "HW/LEO", "Leader Epoch", "KRaft", "生产排障", "技术管理"]
 ---
-
 # Kafka 核心运行架构、高吞吐底层设计与分区一致性模型（高阶架构与生产实战）
 
 > **学习目标定位**：面向数据平台研发负责人、大数据架构师与技术总监岗位，深刻掌握 Apache Kafka 在现代大数据基础设施中的中枢定位。跳出表层 API 调用的局限，透彻剖析其高吞吐底座（顺序写、PageCache、Sendfile 零拷贝与批处理压缩）、KRaft 时代去 ZooKeeper 元数据仲裁机制、基于 Leader Epoch 的分区复制一致性模型，以及 ISR 动态收缩机制。结合字节跳动、阿里、美团等互联网大厂高频面试真题，系统建立千亿级流量大促压测调优、生产级 ISR 抖动排查与金融级零丢失（acks=all）的架构设计与技术管理能力。
