@@ -8,9 +8,9 @@
 
 | 模块 | 关键薄弱主题 | 严重程度 (高/中/低) | 遗忘/模糊细节 | 攻坚计划安排 |
 | :--- | :--- | :---: | :--- | :--- |
-| **01 大数据核心** | Flink Checkpoint 细粒度机制 | 高 | CheckpointBarrier 对齐与非对齐流转、状态持久化内部文件切分 | Day 02 专项攻坚 |
-| **01 大数据核心** | Kafka 底层网络与控制器选举 | 中 | Controller 与 Broker 交互协议、Epoch防脑裂细节 | Day 04-05 专项攻坚 |
-| **01 大数据核心** | Spark Shuffle 内存溢写细节 | 中 | SortShuffle 读写缓冲与堆外内存申请机制 | Day 06 专项攻坚 |
+| **01 大数据核心** | Flink Checkpoint 细粒度机制 | 高 | CheckpointBarrier 对齐与非对齐流转、状态持久化内部文件切分 | **Day 02 & Day 07 已攻坚闭环** |
+| **01 大数据核心** | Kafka 底层网络与控制器选举 | 中 | Controller 与 Broker 交互协议、Epoch防脑裂细节 | **Day 04-05 & Day 07 已攻坚闭环** |
+| **01 大数据核心** | Spark Shuffle 内存溢写细节 | 中 | SortShuffle 读写缓冲与堆外内存申请机制 | **Day 06 & Day 07 已攻坚闭环** |
 | **03 Java工程** | JVM 堆外内存与 G1/ZGC 核心算法 | 中 | 三色标记法并发漏标写屏障、DirectMemory 回收机制 | Day 22 专项攻坚 |
 | **06 AI Agent** | MCP 协议底层数据流与生命周期 | 中 | 工具上下文注入协议、跨Agent通信与状态持久化 | Day 37 专项攻坚 |
 
