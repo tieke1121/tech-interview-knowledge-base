@@ -731,8 +731,8 @@ flowchart TD
 graph LR
     Pre1["Hive 数仓分层与计算引擎优化<br/>(Day 10)"] --> Current["【Apache Doris 实时 OLAP 架构】<br/>(Day 11)"]
     Pre2["HBase 存储架构与 LSM-Tree<br/>(Day 09)"] --> Current
-    Current --> Down1["Apache NiFi 与数据集成工具<br/>(Day 12)"]
-    Current --> Down2["现代数据湖技术 Iceberg/Paimon/Hudi<br/>(Day 13)"]
+    Current --> Down1["Apache Iceberg 架构与数据湖存储内核<br/>(Day 12)"]
+    Current --> Down2["Apache Paimon 实时流批湖仓一体<br/>(Day 13)"]
     Current --> Down3["【阶段复盘 2】大数据存储与查询综合演练<br/>(Day 14)"]
     Current --> Arch["企业级数据中台与统一数据服务 API<br/>(Day 15/19)"]
 ```

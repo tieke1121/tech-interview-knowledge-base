@@ -828,8 +828,8 @@ graph LR
     Pre1["HDFS 存储架构与元数据高可用<br/>(Day 08)"] --> Current["【Hive 数仓分层与计算引擎优化】<br/>(Day 10)"]
     Pre2["Spark 内核架构与 Shuffle 机制<br/>(Day 06)"] --> Current
     Current --> Down1["Apache Doris 实时 OLAP 架构<br/>(Day 11)"]
-    Current --> Down2["Apache NiFi 与数据集成工具<br/>(Day 12)"]
-    Current --> Down3["现代数据湖技术 Iceberg/Paimon/Hudi<br/>(Day 13)"]
+    Current --> Down2["Apache Iceberg 架构与数据湖存储内核<br/>(Day 12)"]
+    Current --> Down3["Apache Paimon 实时流批湖仓一体<br/>(Day 13)"]
     Current --> Arch["企业级数据中台顶层设计与产品化路线<br/>(Day 15)"]
 ```
 

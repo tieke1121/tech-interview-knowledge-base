@@ -43,7 +43,7 @@ flowchart TB
     end
 
     subgraph Ingestion["数据采集与集成层"]
-        NiFi["Apache NiFi / DataX"]
+        ETL["Flink CDC / DataX"]
         Kafka["Kafka 集群"]
     end
 
@@ -75,7 +75,7 @@ flowchart TB
 | 技术选型 | 入选方案 | 备选方案 | 选型权衡与决策理由（性能/成本/生态/运维复杂度） |
 | :--- | :--- | :--- | :--- |
 | **实时计算** | Apache Flink | Spark Streaming | 需支持毫秒级状态告警与复杂窗口计算，Flink 状态机制与低延迟表现更佳 |
-| **OLAP引擎** | Apache Doris | ClickHouse / Kylin | 统一支撑明细查询与高并发聚合，运维简单（无外部依赖），支持标准 SQL 与更新 |
+| **OLAP引擎** | Apache Doris | ClickHouse / StarRocks | 统一支撑明细查询与高并发聚合，运维简单（无外部依赖），支持标准 SQL 与更新 |
 | **任务调度** | DolphinScheduler | Airflow / Azkaban | 分布式去中心化设计，原生支持大数据组件丰富，可视化的拖拽易用性更好 |
 | **中台服务** | Spring Boot + Web | 纯开源报表套件 | 满足客户独立自主操作界面要求，需强定制化多租户权限体系与API生成器 |
 

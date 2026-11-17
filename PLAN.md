@@ -60,8 +60,8 @@ journey
 | **Day 09** | HBase 存储架构与 LSM-Tree | RegionServer/HMaster/WAL/MemStore/HFile/LSM-Tree写入模型/Compaction | 分析高并发写入热点 RowKey 盐化打散方案 | 写流程、读流程多级缓存、Split与Compaction机制 | 深入讲清 HBase 读延迟抖动排查与 RowKey 设计法则 |
 | **Day 10** | Hive 数仓分层与计算引擎优化 | Metastore/数仓建模分层规范/ORC与Parquet存储格式/CBO优化器 | 设计企业级统一离线分层规范（ODS/DWD/DWS/ADS） | 分区剪裁、向量化执行、小文件合并治理 | 讲清数据分层核心价值与不同列存格式差异 |
 | **Day 11** | Apache Doris 实时 OLAP 架构 | FE与BE架构/一致性哈希/Rollup与物化视图/向量化执行引擎/Pipeline执行 | 对比 Doris 与 ClickHouse 在运维与架构上的取舍 | 实时摄入事务、高并发点查与复杂多表关联优化 | 讲透选择 Doris 作为数据中台核心 OLAP 引擎的决策依据 |
-| **Day 12** | Apache NiFi 与数据集成工具 | FlowFile/Processor/NiFi 集群架构/背压机制/DataX与Sqoop集成对比 | 分析企业异构数据源接入的断点续传与元数据感知 | 异构集成瓶颈、海量协议转换与调度开销 | 结合瑞纳智能/美的经历讲清数据集成产品化设计 |
-| **Day 13** | 数据湖技术（Iceberg/Paimon/Hudi） | 湖仓一体演进/ACID事务/快照隔离/隐式分区/流读流写/批流统一底座 | 对比 Apache Iceberg、Paimon 与传统 Hive 的优劣 | 湖仓格式演进、小文件治理、Schema变更支持 | 能够站在技术前瞻视角陈述企业引入湖仓一体的 ROI |
+| **Day 12** | Apache Iceberg 架构与数据湖存储内核 | 快照隔离(Snapshot)/元数据树(Manifest)/隐式分区/并发提交乐观锁/ACID/小文件治理 | 深入分析 Iceberg 替代传统 Hive 格式的核心技术与商业动因 | 快照回溯(Time Travel)、增量读写、Schema 无感演进 | 讲透 Iceberg 在现代数据湖中规避 Hive 目录扫描瓶颈的底层原理 |
+| **Day 13** | Apache Paimon 实时流批湖仓一体 | LSM-Tree湖存储/Changelog生成机制/Partial-Update/Append-Only与主键表/流读流写 | 对比 Paimon 与 Iceberg/Hudi 在实时流式湖仓中的取舍 | 实时数据入湖延迟、批流统一存储、实时维表 Lookup Join | 结合企业实时数仓建设，阐明引入 Paimon 实现分钟级湖仓一体的方案 |
 | **Day 14** | **【阶段复盘 2】** 大数据存储与查询综合演练 | 第二周错题复盘 + 实时与离线混合数仓存储架构演练 | 梳理整体大数据核心组件选型对比大表 | 系统设计题：某工业制造企业百亿级时序与明细查询架构 | 完成第2周自测题，更新掌握度清单 |
 
 ---
