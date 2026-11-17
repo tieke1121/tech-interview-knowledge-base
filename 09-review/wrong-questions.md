@@ -1,3 +1,14 @@
+---
+id: "review-wrong-questions"
+module: "09-review"
+title: "错题记录与攻坚复盘本"
+doc_status: "已完成"
+learning_status: "未学习"
+status: "未学习"
+importance: "P0"
+tags: ["错题记录", "攻坚复盘", "学习追踪"]
+---
+
 # 错题记录与攻坚复盘本 (Wrong Questions Notebook)
 
 > **使用原则**：凡在每日自测、阶段复盘、Agent 提问或模拟面试中回答不完整、卡壳、原理不准或逻辑混乱的问题，必须当天录入本表，并在后续复盘中按周期重刷，直至能完全脱稿流畅作答。

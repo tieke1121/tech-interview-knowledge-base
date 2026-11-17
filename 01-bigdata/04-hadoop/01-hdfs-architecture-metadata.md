@@ -4,12 +4,13 @@ title: "HDFS 底层机制、QJM高可用架构与大厂小文件风暴治理（�
 module: "01-bigdata"
 category: "04-hadoop"
 version_target: "Apache Hadoop 3.3+ / 3.4+ (含纠删码 EC 与联邦机制)"
-status: "学习中"
+doc_status: "已完成"
+learning_status: "未学习"
+status: "未学习"
 importance: "P0"
 last_reviewed: "2026-11-17"
 tags: ["大数据", "Hadoop", "HDFS", "NameNode", "QJM高可用", "纠删码EC", "小文件治理", "生产排障", "技术管理"]
 ---
-
 # HDFS 底层机制、QJM高可用架构与大厂小文件风暴治理（高阶架构与生产实战）
 
 > **学习目标定位**：面向数据平台研发负责人、大数据架构师与技术总监岗位，深刻掌握 Apache HDFS 在现代企业级大数据体系中的存储基石地位。透彻理解 NameNode 内存元数据模型、EditLog 与 FSImage 滚动合并流程、基于 QJM（Quorum Journal Manager）与 Epoch 机制的高可用防脑裂架构、经典机架感知 3 副本放置策略与 Hadoop 3.x 纠删码（Erasure Coding）降本哲学。结合字节跳动、阿里、美团等互联网大厂高频面试真题，系统建立数仓数亿级小文件风暴治理（Small File Storm）、NameNode RPC 线程池打满雪崩定位与 PB 级存储成本优化的技术决策能力。

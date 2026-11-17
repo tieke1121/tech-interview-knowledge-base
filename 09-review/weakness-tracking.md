@@ -1,3 +1,14 @@
+---
+id: "review-weakness-tracking"
+module: "09-review"
+title: "薄弱知识点专项攻坚清单"
+doc_status: "已完成"
+learning_status: "未学习"
+status: "未学习"
+importance: "P0"
+tags: ["薄弱点", "攻坚清单", "学习追踪"]
+---
+
 # 薄弱知识点专项攻坚清单 (Weakness Tracking)
 
 > **定义**：技术管理人员因多年侧重业务与管理，对某些底层技术原理产生记忆断层、源码熟悉度下降或选型对比论据薄弱的知识点。

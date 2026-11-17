@@ -4,12 +4,13 @@ title: "第一周阶段复盘：计算与传输引擎全局贯通与千万级实
 module: "09-review"
 category: "phase-review"
 version_target: "Flink 1.19+ / Kafka 3.7+ / Spark 3.5+"
-status: "学习中"
+doc_status: "已完成"
+learning_status: "未学习"
+status: "未学习"
 importance: "P0"
 last_reviewed: "2026-11-17"
 tags: ["阶段复盘", "Flink", "Kafka", "Spark", "流批一体", "系统设计", "技术管理", "架构答辩"]
 ---
-
 # 第一周阶段复盘：计算与传输引擎全局贯通与千万级实时数据管道架构答辩
 
 > **学习目标定位**：全面复盘第一周（Day 01 - Day 06）涵盖的 **Flink、Kafka 与 Spark 三大核心计算与传输引擎**。打破单一组件的知识孤岛，穿透三大底座的底层设计哲学（内存、容错、网络流控、倾斜治理），沉淀横向对比矩阵。通过千万级 TPS 实时数据管道系统设计答辩与 10 道阶段综合大厂真题三层全解，夯实技术总监/首席数据架构师级别的系统全局观、成本意识与降维答辩能力。

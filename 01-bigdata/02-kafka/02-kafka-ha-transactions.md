@@ -4,12 +4,13 @@ title: "Kafka 高可用容灾、脑裂防范与端到端事务机制（高阶架
 module: "01-bigdata"
 category: "02-kafka"
 version_target: "Apache Kafka 3.6+ / 3.7+ (KRaft 架构)"
-status: "学习中"
+doc_status: "已完成"
+learning_status: "未学习"
+status: "未学习"
 importance: "P0"
 last_reviewed: "2026-11-17"
 tags: ["大数据", "Kafka", "高可用", "事务机制", "幂等性", "跨机房容灾", "MirrorMaker", "生产排障", "技术管理"]
 ---
-
 # Kafka 高可用容灾、脑裂防范与端到端事务机制（高阶架构与生产实战）
 
 > **学习目标定位**：面向数据平台研发负责人、大数据架构师与技术总监岗位，深刻掌握 Apache Kafka 在金融级与千亿级业务场景下的高可用容灾基石。透彻理解 KRaft 模式下的 Controller Quorum 选举与去脑裂机制、Producer 幂等性实现细节、基于 Transaction Coordinator 与两阶段提交（2PC）的端到端事务底层交互时序、LSO（Last Stable Offset）对下游消费者的可见性控制，以及跨机房 MirrorMaker 2.0 多集群容灾架构。结合阿里、字节、美团等一线大厂真实高频面试场景，系统掌握生产环境 ProducerFencedException 崩溃排障、悬挂事务阻塞 LSO 治理与高管维度的双机房容灾架构取舍。

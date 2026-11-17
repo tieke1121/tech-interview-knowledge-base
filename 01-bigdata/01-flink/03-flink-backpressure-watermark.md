@@ -4,12 +4,13 @@ title: "Flink 反压流控机制、网络缓冲调优与 Watermark 时间语义�
 module: "01-bigdata"
 category: "01-flink"
 version_target: "Apache Flink 1.19+ / 2.0"
-status: "学习中"
+doc_status: "已完成"
+learning_status: "未学习"
+status: "未学习"
 importance: "P0"
 last_reviewed: "2026-11-16"
 tags: ["大数据", "Flink", "反压机制", "Credit流控", "Watermark", "时间语义", "迟到数据", "生产排障", "技术管理"]
 ---
-
 # Flink 反压流控机制、网络缓冲调优与 Watermark 时间语义（高阶架构与生产实战）
 
 > **学习目标定位**：面向数据平台研发负责人、大数据架构师与技术总监岗位，深刻掌握 Flink 应用层 Credit-based 流控协议、Netty 网络栈与动态缓冲去膨胀（Buffer Debloating）底层设计哲学；透彻理解分布式事件时间（Event Time）推进本质、多流/多分区 Watermark 对齐裁剪机制与迟到数据多级防御闭环。结合阿里、字节、美团等互联网大厂真实高频面试场景，系统掌握全链路反压雪崩定位、空闲分区卡死排查及业务延迟与精度的架构权衡。

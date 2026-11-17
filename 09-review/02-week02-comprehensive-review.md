@@ -4,12 +4,13 @@ title: "第二周阶段复盘：存储底座、OLAP分析与湖仓一体全局�
 module: "09-review"
 category: "phase-review"
 version_target: "HDFS 3.3+ / HBase 2.5+ / Hive 3.1+ / Doris 2.0+ / Iceberg 1.5+ / Paimon 0.8+"
-status: "学习中"
+doc_status: "已完成"
+learning_status: "未学习"
+status: "未学习"
 importance: "P0"
 last_reviewed: "2026-11-17"
 tags: ["阶段复盘", "HDFS", "HBase", "Hive", "Doris", "Iceberg", "Paimon", "Hudi", "湖仓一体", "架构答辩"]
 ---
-
 # 第二周阶段复盘：存储底座、OLAP分析与湖仓一体全局贯通与百亿级时序架构答辩
 
 > **学习目标定位**：全面复盘第二周（Day 08 - Day 13）涵盖的 **HDFS 存储底座、HBase 存储内核、Hive 数仓分层建模、Apache Doris 实时 OLAP、Apache Iceberg 开放表格式与 Apache Paimon/Hudi 流式湖仓**。彻底打通从底层分布式文件系统、NoSQL 列存、离线数仓模型到现代湖仓一体（Lakehouse）全景技术脉络。沉淀七大存储与查询组件全景对比矩阵；结合工业制造/智慧能源百亿级时序架构设计实战答辩与 10 道阶段综合大厂真题三层全解，夯实技术总监/首席数据架构师在海量存储降本、多引擎协同与存算分离演进中的全局把控力。
@@ -186,7 +187,7 @@ flowchart TD
 
 #### 2. 在线极速服务选型：为什么选择 Apache Doris 承接统一服务？
 - **告别组件割裂**：传统架构需要维护 HBase（做点查）+ ClickHouse（做大屏），运维代价巨大；
-- **Doris 的统一降维打击**：
+- **Doris 的统一架构优势**：
   - **最新状态点查**：采用 Doris **Unique Key 模型（开启 Merge-on-Write）**，设备最新遥测状态点查延迟稳定在 **5~10ms**；
   - **实时聚合大屏**：采用 Doris **Aggregate Key 模型 + Roaring Bitmap**，百亿级设备遥测的多维聚合（如“全省各热力站实时总供热量”）在 **200ms 内极速返回**；
   - **极简运维**：FE/BE 双进程零外部依赖，天然免疫 ZooKeeper 故障，完美支撑太原项目客户现场的极简交付。
@@ -455,7 +456,7 @@ flowchart TD
 > 2. **索引负担与系统稳定性（Zero Index vs Flink State Index）**：
 >    - **Hudi 的 Flink State Index 隐患**：为了加速索引查找，Hudi 默认将全量 `Key -> FileID` 映射缓存在 Flink 的 RocksDB 状态中。当历史数据突破数亿时，RocksDB 堆外内存膨胀至数十 GB，频繁引发 TaskManager OOM-Killed；
 >    - **Paimon 的零索引哲学**：Paimon 依靠 LSM-Tree 自身的有序性。文件内部自带主键索引与 BloomFilter，后台 Compaction 负责清理旧版本，Flink 节点无需常驻任何历史主键状态，内存消耗极小。
-> 3. **多流拼宽表（Partial-Update）的技术降维打击**：
+> 3. **多流拼宽表（Partial-Update）的架构优势**：
 >    - **传统 Flink 双流/多流 Join 痛点**：必须在 Flink 中开辟数百 GB 状态内存，迟到数据易导致宽表字段残缺，Checkpoint 频繁超时；
 >    - **Paimon Partial-Update 解决方案**：
 >      - 多个独立的 Flink 任务各自往同一张 Paimon 主键表写数据（每个流只负责写入自己拥有的列，其他列置 NULL）；

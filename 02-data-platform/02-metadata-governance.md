@@ -4,12 +4,13 @@ title: "数据治理体系与元数据管理：全景框架、Atlas内核、统�
 module: "02-data-platform"
 category: "02-metadata-governance"
 version_target: "Apache Atlas 2.3+ / OpenMetadata / DataHub / Data Governance 2.0"
-status: "学习中"
+doc_status: "已完成"
+learning_status: "未学习"
+status: "未学习"
 importance: "P0"
 last_reviewed: "2026-11-17"
 tags: ["数据治理", "元数据管理", "Apache Atlas", "统一元模型", "数据血缘", "技术管理", "架构设计"]
 ---
-
 # 数据治理体系与元数据管理：全景框架、Atlas内核、统一元模型设计与企业级常态化治理
 
 > **学习目标定位**：面向技术总监、数据平台研发负责人、高级数据架构师岗位，系统掌握企业级数据治理顶层框架（DAMA-DMBOK 工业化落地）与元数据管理底座的核心技术实现。深度剖析三类元数据（技术、业务、操作）的统一抽象模型、Apache Atlas 底层内核架构（Type System、Hook 异步总线、JanusGraph 图引擎、HBase 存储与 Solr/ES 倒排检索协作）、异构引擎（Hive/Spark/Doris/Paimon/Kafka）端到端血缘采集与缝合机制。结合大型制造集团（美的）多源异构资产盘点与工业物联网（瑞纳智能）百万级设备测点元数据建模经验，讲透如何规避“运动式治理”陷阱，建立基于元数据驱动的代码门禁、指标防打架与 FinOps 降本增效长效机制。

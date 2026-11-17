@@ -4,12 +4,13 @@ title: "大数据平台可观测性与容灾高可用：全链路SLA指标追踪
 module: "02-data-platform"
 category: "06-observability-ha"
 version_target: "Cloud-Native Observability (OpenTelemetry / Prometheus) / HA & Multi-Cluster Disaster Recovery"
-status: "学习中"
+doc_status: "已完成"
+learning_status: "未学习"
+status: "未学习"
 importance: "P0"
 last_reviewed: "2026-11-17"
 tags: ["可观测性", "容灾高可用", "异地多活", "SLA监控", "灾备演练", "技术管理", "架构设计"]
 ---
-
 # 大数据平台可观测性与容灾高可用：全链路SLA指标追踪、多集群冷热容灾、异地双活与机房断电应急预案
 
 > **学习目标定位**：面向技术总监、数据平台研发负责人、高级数据架构师岗位，系统掌握构建千亿级数据中台“全链路可观测性雷达”与“工业级多集群容灾高可用（Disaster Recovery - DR）防护网”的底层机制与系统工程方案。深入剖析 RTO（恢复时间目标）与 RPO（数据恢复点目标）在大数据极端场景下的客观物理边界、跨机房实时数据镜像（Kafka MirrorMaker 2.0 / Dual-Write）与湖仓增量冷备（DistCp Snapshot / Doris CCR）机制、基于 OpenTelemetry 与 Prometheus 的全链路核心 SLI/SLO 监控网络。结合大型制造（美的）跨园区容灾与工业物联网（瑞纳智能太原项目）10 万设备本地边缘缓存加集团主备秒级切换实战，讲透突发机房断电极端灾难下的架构自愈、红蓝对抗混沌演练与常态化高可用管理 SOP。

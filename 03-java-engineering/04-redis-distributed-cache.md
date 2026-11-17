@@ -4,12 +4,13 @@ title: "Redis 高性能架构与分布式缓存"
 module: "03-java-engineering"
 category: "04-redis-distributed-cache"
 version_target: "Redis 7.0+ / 7.2 / 7.4"
-status: "学习中"
+doc_status: "已完成"
+learning_status: "未学习"
+status: "未学习"
 importance: "P0"
 last_reviewed: "2026-11-17"
 tags: ["Java工程底座", "Redis", "分布式缓存", "双写一致性", "分布式锁", "Cluster高可用", "生产排障"]
 ---
-
 # Redis 高性能架构与分布式缓存
 
 > **学习目标定位**：面向技术总监、数据平台研发负责人、高级数据架构师岗位，深入透析分布式缓存核心底座。彻底解构 Redis 单线程 I/O 多路复用、底层核心数据结构（SDS、Listpack、Dict 渐进式 Rehash、Skiplist 跳表）、持久化 RDB/AOF 内部机制（Fork COW 写时复制）及 Cluster 槽位路由。攻克缓存击穿/穿透/雪崩多层防御、Binlog 异步解耦的最终一致性架构、分布式锁 Redlock 论战与边界，以及大促脉冲下的内存淘汰、BigKey 治理与脑裂防范。

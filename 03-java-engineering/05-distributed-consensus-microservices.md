@@ -4,12 +4,13 @@ title: "分布式理论与微服务架构工程"
 module: "03-java-engineering"
 category: "05-distributed-consensus-microservices"
 version_target: "Spring Cloud 2023+ / 2024, Seata 2.0+, Dubbo 3.3+, Nacos 2.3+"
-status: "学习中"
+doc_status: "已完成"
+learning_status: "未学习"
+status: "未学习"
 importance: "P0"
 last_reviewed: "2026-11-17"
 tags: ["Java工程底座", "分布式理论", "CAP/BASE", "Raft协议", "分布式事务", "微服务治理", "Sentinel", "Seata"]
 ---
-
 # 分布式理论与微服务架构工程
 
 > **学习目标定位**：面向技术总监、数据平台研发负责人、高级数据架构师岗位，深入透析分布式系统的共识算法、事务协调与微服务工程治理底座。彻底攻克 CAP/BASE 工业级权衡、Raft / Multi-Paxos / ZAB 共识协议状态机（选举、日志复制、Quorum 法定人数与脑裂防御）。系统剖析分布式事务（2PC、TCC 空回滚/防悬挂、Saga、本地消息表及 Seata AT 模式原理），并建立大促脉冲下的服务雪崩防御、自适应限流熔断、金丝雀灰度发布与跨机房容灾 SLA 管控体系。

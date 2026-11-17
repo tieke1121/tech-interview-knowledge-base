@@ -4,12 +4,13 @@ title: "Hive数仓分层与计算优化：Metastore解耦、列存格式选型�
 module: "01-bigdata"
 category: "05-hive"
 version_target: "Apache Hive 3.1+ / 4.0+ & Spark 3.5+"
-status: "学习中"
+doc_status: "已完成"
+learning_status: "未学习"
+status: "未学习"
 importance: "P0"
 last_reviewed: "2026-11-17"
 tags: ["大数据", "数据仓库", "Hive", "数仓建模", "列式存储", "性能调优", "数据倾斜"]
 ---
-
 # Hive数仓分层与计算优化：Metastore解耦、列存格式选型、CBO优化器与千亿级数据倾斜治理
 
 > **学习目标定位**：面向技术总监、数据平台研发负责人、高级数据架构师岗位，系统掌握企业级统一数仓建模分层哲学（ODS/DWD/DWS/ADS/DIM）、列式存储（ORC vs Parquet）物理存储内核、CBO 代价优化器执行树推导与千亿级数据倾斜治理。结合互联网大厂高频面试真题与百万级批处理生产场景，建立针对 Reduce 99% 长尾卡死、小文件爆发治理、HMS 元数据高并发瓶颈与湖仓一体演进的降维把控与技术管理领导力。

@@ -3,12 +3,13 @@ id: "mgmt-planning-review-cr"
 title: "研发计划拆解、方案评审与 Code Review"
 module: "04-tech-management"
 category: "engineering-process"
-status: "学习中"
+doc_status: "已完成"
+learning_status: "未学习"
+status: "未学习"
 importance: "P0"
 last_reviewed: "2026-11-17"
 tags: ["技术管理", "WBS工作拆解", "技术方案评审", "Code Review", "研发过程控制", "工程文化"]
 ---
-
 # 研发计划拆解、方案评审与 Code Review
 
 > **管理维度定位**：本模块聚焦技术总监、数据平台研发负责人、大数据研发经理在研发过程控制中的核心把控抓手。系统解构 WBS 工作分解结构与估时模型、技术方案评审（Design Review/RFC/ADR）准入准出机制，以及 Code Review（代码审查）从制度推行、阻力破局到奖惩落地的完整工程闭环。结合美的集团、思科、Zoom 及瑞纳智能太原项目等大型软件研发与中台交付实战，提炼技术高管在过程控制、质量守门、业务排期博弈与工程文化塑造上的管理决策与降维表达能力。

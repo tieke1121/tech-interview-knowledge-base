@@ -4,12 +4,13 @@ title: "数据质量体系与端到端数据血缘：Apache Calcite解析内核�
 module: "02-data-platform"
 category: "03-quality-lineage"
 version_target: "Apache Calcite 1.36+ / Great Expectations / Griffin / SQLLineage"
-status: "学习中"
+doc_status: "已完成"
+learning_status: "未学习"
+status: "未学习"
 importance: "P0"
 last_reviewed: "2026-11-17"
 tags: ["数据质量", "数据血缘", "Apache Calcite", "AST语法树", "熔断阻断", "技术管理", "架构设计"]
 ---
-
 # 数据质量体系与端到端数据血缘：Apache Calcite解析内核、波动率监控、熔断阻断闭环与字段级血缘提取
 
 > **学习目标定位**：面向技术总监、数据平台研发负责人、高级数据架构师岗位，系统掌握构建企业级高可靠“数据质量与血缘联动防御网”的底层机制与系统工程方案。深度剖析数据质量六大维度（完整性、唯一性、准确性、一致性、时效性、有效性）在工业级生产中的量化落地标准、基于 Apache Calcite 抽象语法树（AST）实现字段级血缘（Column-Level Lineage）逆向解析算法推导、动态基线波动率检测机制（3-$\sigma$ 与双重指数平滑）。结合核心电商交易对账与工业物联网（太原智慧供热 10 万台设备测点跳变清洗）实战经验，讲透如何设计“强阻断与熔断闭环（Circuit Breaker）”，从根本上消灭数据脏乱差与上游变更雪崩。

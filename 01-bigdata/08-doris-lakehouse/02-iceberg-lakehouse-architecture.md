@@ -4,12 +4,13 @@ title: "Apache Iceberg架构与数据湖存储内核：快照隔离、元数据�
 module: "01-bigdata"
 category: "08-doris-lakehouse"
 version_target: "Apache Iceberg 1.5+ / 1.6+ (Format V2)"
-status: "学习中"
+doc_status: "已完成"
+learning_status: "未学习"
+status: "未学习"
 importance: "P0"
 last_reviewed: "2026-11-17"
 tags: ["大数据", "数据湖", "Lakehouse", "Apache Iceberg", "ACID", "快照隔离", "架构设计"]
 ---
-
 # Apache Iceberg架构与数据湖存储内核：快照隔离、元数据树、隐式分区、并发提交乐观锁与小文件治理
 
 > **学习目标定位**：面向技术总监、数据平台研发负责人、高级数据架构师岗位，系统掌握现代数据湖开放表格式标准 Apache Iceberg 的底层设计哲学。深入剖析四层元数据树（Catalog、Metadata File、Manifest List、Manifest File）的剪枝寻址机制、基于乐观并发控制（OCC）与 CAS 原子提交的快照隔离（Snapshot Isolation）、隐式分区与分区演进、Format V2 行级更新（Position/Equality Delete）以及生产级小文件治理。结合互联网大厂高频面试真题与百 PB 级湖仓生产实践，建立针对 CommitFailedException 冲突规避、Delete File 读放大治理、统一 REST Catalog 建设与湖仓存算分离成本 ROI 的全景把控能力。
@@ -424,7 +425,7 @@ flowchart TD
 
 #### 深入回答（技术细节展开、底层机制与推导）：
 > “深入对比 Hive 目录模型与 Iceberg 文件模型的底层机制差异：
-> 1. **元数据管理维度的降维打击**：
+> 1. **元数据管理维度的突破性优势**：
 >    - **传统 Hive**：表元数据存储在关系型数据库（HMS MySQL）中，但其记录的粒度仅停留在‘分区与目录路径级别’。每次执行查询，引擎必须向 HDFS/S3 发起全量目录递归扫描（`listStatus`）以获取实际的数据文件。当包含 10 万个分区时，S3 Listing 耗时长达数分钟，且容易触发 HTTP 503 限流；
 >    - **Apache Iceberg**：元数据粒度精细到‘单个物理数据文件级别’。通过四层元数据树（Metadata File $\rightarrow$ Manifest List $\rightarrow$ Manifest File），直接记录了每一个数据文件的路径、大小、行数与列级 Min/Max 统计，**在内存中完成文件级定位，完全不需要对物理存储做任何 Listing 操作**。
 > 2. **事务与一致性保障机制**：
@@ -582,7 +583,7 @@ flowchart TD
 >          retain_last => 100
 >      );
 >      ```
->    - **物理文件与 Delete 彻底合并重写（解决读放大的核武器）**：
+>    - **物理文件与 Delete 彻底合并重写（解决读放大的核心手段）**：
 >      ```sql
 >      CALL lakehouse_prod.system.rewrite_data_files(
 >          table => 'trade.dwd_order_fact',

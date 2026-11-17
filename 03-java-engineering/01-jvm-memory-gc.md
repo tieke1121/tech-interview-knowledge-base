@@ -4,12 +4,13 @@ title: "JVM 内存模型、垃圾回收调优与生产排障：Java 17/21 JMM规
 module: "03-java-engineering"
 category: "01-jvm-gc"
 version_target: "Java 17 LTS / Java 21 LTS (HotSpot JVM)"
-status: "学习中"
+doc_status: "已完成"
+learning_status: "未学习"
+status: "未学习"
 importance: "P0"
 last_reviewed: "2026-11-17"
 tags: ["JVM", "JMM", "垃圾回收", "G1", "ZGC", "三色标记", "内存泄漏", "生产排障", "技术管理"]
 ---
-
 # JVM 内存模型、垃圾回收调优与生产排障：Java 17/21 JMM规范、G1/ZGC底层原理、三色标记屏障与OOM根因决策
 
 > **学习目标定位**：面向技术总监、数据平台研发负责人、高级数据架构师岗位，系统掌握现代企业级 Java 运行环境（对齐主流 Java 17 LTS / Java 21 LTS）虚拟机底座的核心原理与生产调优排障工程。深入剖析 Java 内存模型（JMM）Happens-Before 规则与底层 CPU 硬件级内存屏障、运行时数据区与堆外直接内存（DirectMemory）管理、低延迟垃圾收集器代际演进（从 CMS 内存碎片到 G1 SATB 停顿预测，再到 ZGC 染色指针与读屏障对象自愈）。结合大型互联网大促与大数据基础组件（Flink/Spark/Netty）线上突发频繁 Full GC、堆外内存泄漏及容器环境 Exit Code 137 OOM-Killed 真实生产事故，建立结构化根因定位决策树与团队 JVM 生产参数基线管控规范。

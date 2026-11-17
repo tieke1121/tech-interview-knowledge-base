@@ -4,12 +4,13 @@ title: "Spark 内核架构、Shuffle底层机制与大促级数据倾斜治理�
 module: "01-bigdata"
 category: "03-spark"
 version_target: "Apache Spark 3.5+ / 4.0 趋势"
-status: "学习中"
+doc_status: "已完成"
+learning_status: "未学习"
+status: "未学习"
 importance: "P0"
 last_reviewed: "2026-11-17"
 tags: ["大数据", "Spark", "Shuffle机制", "SortShuffle", "AQE", "内存模型", "数据倾斜", "生产排障", "技术管理"]
 ---
-
 # Spark 内核架构、Shuffle底层机制与大促级数据倾斜治理（高阶架构与生产实战）
 
 > **学习目标定位**：面向数据平台研发负责人、大数据架构师与技术总监岗位，深刻掌握 Apache Spark 在现代企业级离线数仓与大规模批处理中的统治级底座能力。透彻理解 Driver 与 Executor 分布式协作拓扑、DAG 两级划分机制、统一内存管理模型（Unified Memory）、SortShuffle 演进与堆外 Tungsten 引擎底层设计哲学；系统掌握 Spark 3.5+ 自适应查询执行（AQE）在运行态的动态伸缩。结合阿里、字节、美团等一线大厂真实高频面试场景，建立大促千亿级数据倾斜治本体系、YARN/K8s Exit Code 137 容器强杀深度定位，以及数仓万级作业错峰调度的架构治理与降本增效能力。
@@ -262,7 +263,7 @@ flowchart TD
 - **真实生产现象**：每日凌晨最重要的财务大宽表构建任务，总计 2000 个 Task，前 1995 个 Task 在 10 分钟内全部跑完，剩下的 5 个 Task 持续运行超过 3 个小时依然不结束，导致整个数仓调度下游数百个下游作业全部延期。
 - **深度根因分析**：
   两张表通过 `merchant_id` 进行 `JOIN`。在业务端，存在大量未注册的测试商户或匿名散客，其默认值被赋为固定占位符 `merchant_id = '-999'` 或 `NULL`。在执行基于 Hash 的 Shuffle 时，这上千万条记录全部被分流到了同一个 Reducer 中处理，引发单点计算超载。
-- **治理策略（降维打击三招）**：
+- **治理策略（三层体系化解法）**：
   1. **第一招（前置空值过滤）**：在 Join 前通过 SQL 显式过滤或将无效 Key 转化为带随机散列的字符串：
      ```sql
      SELECT * FROM t1 

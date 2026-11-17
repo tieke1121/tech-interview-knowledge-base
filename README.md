@@ -83,7 +83,7 @@ tech-interview-knowledge-base/
 在面试表达中，针对第 8 板块的所有互联网大厂核心真题，在第 9 板块中**逐题提供完整解题答案**：
 - **简洁回答（1分钟电梯破题）**：直奔核心，提炼本质原因与量化结论，适配电梯沟通与初步破题。
 - **深入回答（机制推导与边界条件）**：深入协议交互、状态机流转与底层设计哲学，体现过硬技术深度。
-- **架构师/总监视角（降维升华）**：从技术取舍、成本ROI、高可用防雪崩、多租户SLA与工程规范落地角度展现高管大局观。
+- **架构师/总监视角（高维权衡与管理视野）**：从技术取舍、成本ROI、高可用防雪崩、多租户SLA与工程规范落地角度展现高管大局观。
 
 ---
 
@@ -112,7 +112,8 @@ python3 scripts/verify_knowledge_base.py
 
 ## 七、快速开始
 
-1. 阅读 [AGENTS.md](file:///Users/wanna/tk/tech-interview-knowledge-base/AGENTS.md) 了解协同规约。
-2. 查看 [PLAN.md](file:///Users/wanna/tk/tech-interview-knowledge-base/PLAN.md) 确认当日学习目标。
-3. 打开对应知识点文档（如第一天：[01-flink-runtime-architecture.md](file:///Users/wanna/tk/tech-interview-knowledge-base/01-bigdata/01-flink/01-flink-runtime-architecture.md)）进入深度学习。
-4. 学习后在 [PROGRESS.md](file:///Users/wanna/tk/tech-interview-knowledge-base/PROGRESS.md) 中更新学习状态，错题写入 [wrong-questions.md](file:///Users/wanna/tk/tech-interview-knowledge-base/09-review/wrong-questions.md)。
+1. 阅读 [AGENTS.md](./AGENTS.md) 了解 AI 与学员协同规约。
+2. 查阅 [PROFILE_FACTS.md](./PROFILE_FACTS.md) 确认个人真实经历基线与待核实清单。
+3. 查看 [PLAN.md](./PLAN.md) 确认当日 90 分钟学习目标（必学/进阶/拓展）。
+4. 打开对应知识点文档（如第一天：[01-flink-runtime-architecture.md](./01-bigdata/01-flink/01-flink-runtime-architecture.md)）进入深度学习。
+5. 学习后在 [PROGRESS.md](./PROGRESS.md) 中更新学习状态，错题写入 [wrong-questions.md](./09-review/wrong-questions.md)。
