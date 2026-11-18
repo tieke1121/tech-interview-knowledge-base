@@ -4,8 +4,8 @@ title: "文档切分与元数据建模：多范式分块算法、Late Chunking�
 module: "10-ai-data-engineering"
 category: "02-chunking-metadata"
 doc_status: "已完成"
-learning_status: "未学习"
-status: "未学习"
+learning_status: "学习中"
+status: "学习中"
 importance: "P0"
 last_reviewed: "2026-11-18"
 tags: ["AI数据工程", "文档切分", "Chunking", "Late Chunking", "Parent-Child", "元数据建模", "权限隔离", "数据治理", "数据血缘", "RAG"]
@@ -595,6 +595,42 @@ flowchart TD
 - 仅靠“人工问 5 个问题感觉效果还不错”决定切分方案；
 - 用 Chunk 命中率（Hit Rate@5）直接对比 200 Tokens 和 1,500 Tokens 两种方案，得出“越大越好”的错误统计结论；
 - 把 AI 知识库与企业既有数据安全、元数据目录和血缘体系割裂成两张皮。
+
+---
+
+### 11.7 面试现场自然口述示范与一页纸速记卡（Day 44 复盘精华）
+
+> **使用方式**：延续“传统大数据建模与数据治理迁移到 AI 数据架构”的表达习惯，把切分与元数据定位为 **AI 知识库的 DWS 粒度建模与治理底座**。
+
+#### 口述示范 A：Chunk Size 和 Overlap 怎么选？大模型支持 1M 上下文了还需要切分吗？
+> “先说第二个问题：**哪怕大模型窗口到了 128K 甚至 1M，企业知识库依然必须做精细切分**。三个硬约束绕不开：一是 1 万份文档动辄几亿 Token，物理上塞不进单次请求；二是全量硬塞延迟和账单都会爆炸；三是超长上下文存在明显的 **Lost in the Middle** 注意力衰减，把关键条款埋在几十万字中间模型照样漏看。
+>
+> 至于 **Chunk Size 怎么选**，本质上是**‘检索精度’和‘生成完整性’的矛盾**：切太小（比如 100 Token），丢主语、丢前提条件（像‘上述条款不适用于外包人员’直接断联）；切太大（比如 2000 Token），多个主题混在一个 1024 维固定向量里发生**语义稀释**，检索精准度暴跌。  
+> 所以我的工程原则不是去死磕一个万能数字，而是**‘把检索粒度和生成粒度解耦’**：
+> 1. **先按文档结构感知切分**：绝不用固定字符一刀切——制度/手册按章节标题树切，表格独立成块且拆行补表头，代码按函数/类 AST 切，FAQ 按问答对独立成块；
+> 2. **落地 Parent-Child Chunking（父子块架构）**：用 **256~512 Tokens 的小块（Child）** 做向量和 BM25 精准检索；一旦命中，回溯取出它所属的 **1000~1500 Tokens 的大块（Parent）** 或前后相邻窗口交给大模型生成答案，兼顾高精度检索与完整上下文；
+> 3. **Overlap（重叠）** 仅作为兜底设为块长的 **10%~15%**（采用结构切分和父子块后甚至可以降到 0%~5%，省存储和去重开销）；最终参数必须基于黄金测试集做对照实验定稿，不靠拍脑袋。”
+
+#### 口述示范 B：如何设计企业级文档与 Chunk 元数据模型，支撑多版本、权限与溯源？
+> “这一块和传统数据中台的元数据建模（Metadata Governance）高度相通。我会把元数据分成**主表真相源（PostgreSQL）**和**检索期下推 Payload（向量库/ES）**两层，字段围绕四个维度建模：
+> 1. **身份与版本血缘**：`doc_id`、`version_id`、`is_latest`、`content_sha256`、`chunk_sha256`、`effective_from / effective_to`（生效与过期时间）、`parser_version / chunker_version`——支持版本切换、失效过滤、块级 Diff 增量更新和全链路血缘追溯；
+> 2. **安全与多租户权限（最核心）**：`tenant_id`、`security_level`、`acl_roles[]`（部门/角色/安全组列表）——**所有权限必须在检索期做 Pre-filtering 强制下推**，绝不把无权限文档召回后再让 Prompt 过滤；而且易变的权限建议绑定角色组，避免单人授权列表爆炸或组织调整引发海量向量重写；
+> 3. **结构拓扑关系**：`parent_chunk_id`、`prev_chunk_id / next_chunk_id`、`section_path`（面包屑路径，如 `财务制度 > 差旅报销 > 住宿标准`）以及关联图表的 `linked_media_ids`——在切分时顺手把 `section_path` 拼进检索文本头部，能极大消除孤立段落的上下文缺失；
+> 4. **原文物理溯源**：`page_no`、`bbox[x1,y1,x2,y2]`、`char_start / char_end`——前端直接支持点击引用跳转到原 PDF 对应页高亮核验。”
+
+#### 口述示范 C：Parent-Child、Late Chunking 和 Contextual Retrieval 怎么选？切分好坏怎么科学评估？
+> - **三种上下文保持方案的工程取舍**：
+>   - **Parent-Child（首选主干）**：实现最简单、零额外大模型预处理费用、完全不绑定特定 Embedding 模型，80% 的企业知识库优先上这套；
+>   - **Contextual Retrieval（Anthropic 方案，切块前用廉价小模型给每块生成 50~100 字背景导语拼在头部）**：对金融/法务/制度类“强指代、弱结构”文档提分极明显，但离线构建需要把整份文档喂给 LLM 产生额外 Token 成本（需配合 Prompt Caching 压成本），适合对核心高价值文档定向开启；
+>   - **Late Chunking（先将整篇长文送入长窗口 Embedding 模型做全篇 Token 级自注意力编码，再按切块边界做 Mean Pooling）**：理论上最优雅地保留跨段指代且免 LLM 费用，但强依赖支持 8K+ 长窗口的开源 Embedding 模型且改造推理管线门槛较高，适合有专职算法/推理工程能力的团队二期探索。
+> - **切分质量的科学评估（避开“块越大 Recall 越高”陷阱）**：不能直接拿 Chunk 级 Hit Rate 对比 300 Token 和 1500 Token 方案（大块把半页纸全包进去，命中率虚高但噪音爆表）。科学做法是把黄金测试集的答案真值标在**原文档精确字符区间 `[char_start, char_end]`**（与切分方案解耦），在相同召回总 Token 预算下计算 **Token-level Recall / Precision / F1（Span IoU）**，同时配合入库门禁（碎片率 `< 60 Token`、超长截断为 0）和下游生成 Faithfulness 综合评判。”
+
+#### Day 44 一页纸速记卡
+1. **核心定性**：切分与元数据 = AI 知识库的 **DWS 粒度建模与数据治理层**；检索粒度与生成粒度必须解耦。
+2. **主流工程组合**：**结构感知切分 + Parent-Child（256~512 子块检索 / 1000~1500 父块生成）+ 面包屑路径 `section_path` 注入**；Overlap 控制在 10%~15%（结构切分后可更低）。
+3. **元数据四大核心维度**：版本血缘（`version/is_latest/sha256/effective_time`）+ 安全权限（`tenant_id/acl_roles` 强制 Pre-filter）+ 结构指针（`parent/prev/next/section_path`）+ 物理溯源（`page_no/bbox/char_span`）。
+4. **三大上下文保持取舍**：**Parent-Child**（性价比最高首选）vs **Contextual Retrieval**（高价值强指代文档，靠 Prompt Cache 降本）vs **Late Chunking**（需长窗开源 Embedding 定制池化）。
+5. **评估避坑铁律**：严禁用 Chunk 级 Hit Rate 直接比不同块长；真值必须锚定原文档字符区间，在等预算下测 **Token-level IoU (Recall/Precision/F1)**。
 
 ---
 
