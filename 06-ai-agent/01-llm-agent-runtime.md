@@ -667,6 +667,8 @@ flowchart TD
     Safety_Guardrails --> DataOps_Application
 ```
 
+> **延伸阅读（生产线上部署专题）**：关于如何将上述底层机制工程化落地为可在线上稳定运行的生产级 Agent 系统（涵盖无状态编排与 Checkpointer 持久化、AI Gateway 路由容灾、执行沙箱、全链路可观测性、评测门禁与灰度发布），请参见专项文档 [05-production-agent-architecture.md](./05-production-agent-architecture.md)。
+
 ---
 
 ## 12. 权威参考与官方进阶资料
