@@ -28,6 +28,7 @@ mindmap
       数据平台研发负责人
       大数据研发经理
       高级数据架构师
+      AI 数据架构师
       技术研发负责人
     兼顾拓展
       技术总监 / VP of Engineering
@@ -44,8 +45,9 @@ mindmap
 ```text
 tech-interview-knowledge-base/
 ├── README.md               # 项目说明、画像分析与全局导航入口
-├── PLAN.md                 # 42天全周期学习冲刺计划（每天90分钟规划）
+├── PLAN.md                 # 42天全周期学习冲刺计划 + AI数据架构拓展专题（每天90分钟）
 ├── PROGRESS.md             # 当前学习进度看板、状态机流转与掌握度清单
+├── PROFILE_FACTS.md        # 个人履历真实性事实清单、能力边界与教学案例隔离规范
 ├── AGENTS.md               # AI Agent (Codex/Antigravity) 协同工作准则与质量红线
 ├── 00-foundations/         # 基础概念、学习方法论与面试表达心法
 ├── 01-bigdata/             # 模块01：大数据核心技术 (Flink/Kafka/Spark/Hadoop/Doris等)
@@ -53,12 +55,13 @@ tech-interview-knowledge-base/
 ├── 03-java-engineering/    # 模块03：Java底层、JVM、并发编程、PostgreSQL/Redis与系统架构
 ├── 04-tech-management/     # 模块04：研发团队管理、团队招聘、绩效激励、效能与技术债务
 ├── 05-project-management/  # 模块05：项目管理与交付、需求控制、客户沟通、太原验收实战
-├── 06-ai-agent/            # 模块06：AI Agent、LLM原理、Skills、MCP、RAG架构与AI工程化
+├── 06-ai-agent/            # 模块06：LLM原理、Agent运行与线上部署架构、Skills、MCP、RAG与AI工程化
 ├── 07-project-review/      # 模块07：真实项目复盘 (瑞纳中台从0到1、太原交付、思科/美的/Zoom)
 ├── 08-interview-questions/ # 分类面试题库 (基础/原理/场景/系统设计/管理行为题)
 ├── 09-review/              # 错题记录、阶段复习自测与薄弱知识攻坚
+├── 10-ai-data-engineering/ # 模块10：AI数据架构与非结构化数据工程 (解析/切分/索引/混合检索/RAG评估与闭环)
 ├── templates/              # 统一文档模板 (技术文档/管理文档/项目复盘模板)
-└── scripts/                # 自动化检查脚本 (完整性校验、元数据检查、断链检测)
+└── scripts/                # 自动化检查脚本 (结构质量、引用路径与事实隔离三维质检)
 ```
 
 ---

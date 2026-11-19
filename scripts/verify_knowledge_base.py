@@ -39,6 +39,22 @@ REQUIRED_TECH_SECTIONS = [
     "12. 权威参考与官方进阶资料",
 ]
 
+# AI 数据工程模块 (10-ai-data-engineering/01~08) 必须包含的 12 个核心段落关键词
+REQUIRED_AI_DATA_SECTIONS = [
+    "1. 核心概念",
+    "2. 解决的问题",
+    "3. 底层原理",
+    "4. 系统架构",
+    "5. 关键算法或实现机制",
+    "6. 技术选型与替代方案",
+    "7. 工程实践",
+    "8. 常见故障与解决思路",
+    "9. 性能及成本分析",
+    "10. 面试题",
+    "11. 参考答案",
+    "12. 官方资料与源码参考",
+]
+
 # 核心 Frontmatter 键
 REQUIRED_FRONTMATTER_KEYS = [
     "id",
@@ -139,6 +155,13 @@ def verify_structural_quality(file_path: Path, content: str, fm: dict, is_tech_m
             if "#### 简洁回答" not in sec9_text or "#### 深入回答" not in sec9_text:
                 errors.append("第9节答案缺少标准三层回答结构 (必须包含简洁回答、深入回答与架构师视角)")
                 
+    # 如果是 AI 数据工程核心专题文档 (01~08)，校验用户指定的 12 大段落规范
+    if "10-ai-data-engineering" in str(file_path) and re.match(r"^0[1-8]-", file_path.name):
+        for sec in REQUIRED_AI_DATA_SECTIONS:
+            sec_pattern = re.escape(sec.split(" ")[0]) + r"\s*" + re.escape(sec.split(" ", 1)[1])
+            if not re.search(sec_pattern, content):
+                errors.append(f"缺少 AI 数据工程规范段落: '{sec}'")
+
     return errors
 
 def scan_fact_verification_advisory(file_path: Path, content: str):
@@ -150,11 +173,11 @@ def scan_fact_verification_advisory(file_path: Path, content: str):
     for tag in unverified_tags:
         advisories.append(f"标记待核实项: {tag.strip()}")
         
-    # 检查特定复盘与管理文档中是否挂载 PROFILE_FACTS 隔离说明
+    # 检查特定复盘、交付与教学假设文档中是否挂载 PROFILE_FACTS 隔离说明
     rel_str = str(file_path)
-    if "07-project-review" in rel_str or "05-project-management" in rel_str:
+    if "07-project-review" in rel_str or "05-project-management" in rel_str or "10-ai-data-engineering" in rel_str:
         if "PROFILE_FACTS.md" not in content and "案例性质" not in content:
-            advisories.append("项目复盘/交付文档未检测到案例隔离声明 (需引用 PROFILE_FACTS.md)")
+            advisories.append("项目复盘/教学案例文档未检测到案例隔离声明 (需引用 PROFILE_FACTS.md 或标注案例性质)")
             
     return advisories
 
@@ -174,6 +197,7 @@ def main():
         "06-ai-agent",
         "07-project-review",
         "09-review",
+        "10-ai-data-engineering",
     ]
 
     total_docs = 0
@@ -201,6 +225,11 @@ def main():
         
         for md_file in mod_dir.rglob("*.md"):
             if md_file.name in ["README.md", "SUMMARY.md"]:
+                # 模块 README 也做链接与绝对路径校验
+                rel_readme = str(md_file.relative_to(ROOT_DIR))
+                p_errs = check_path_and_links(md_file, md_file.read_text(encoding="utf-8"))
+                if p_errs:
+                    path_link_errors.append((rel_readme, p_errs))
                 continue
             
             total_docs += 1

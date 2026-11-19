@@ -5,10 +5,10 @@ module: "03-java-engineering"
 category: "03-database-storage-engine"
 version_target: "MySQL 8.0+ / 8.4 LTS, PostgreSQL 16+ / 17"
 doc_status: "已完成"
-learning_status: "未学习"
-status: "未学习"
+learning_status: "学习中"
+status: "学习中"
 importance: "P0"
-last_reviewed: "2026-11-17"
+last_reviewed: "2026-11-19"
 tags: ["Java工程底座", "数据库存储引擎", "MVCC", "WAL", "B+Tree", "锁机制", "高可用架构", "生产排障"]
 ---
 # 数据库底层与 PostgreSQL/MySQL 事务
@@ -743,6 +743,148 @@ graph TD
 >    - 若团队以传统 Java/MySQL 技术栈为主，追求自主可控、低成本与渐进式演进，选用 **ShardingSphere 客户端分片** 是风险最低、确定性最高的成熟路径。
 > 3. **总体持有成本（TCO）与硬件 ROI**：
 >    - 通过冷热分离将 90% 的冷数据搬运至低成本对象存储（AWS S3 / 阿里云 OSS + Paimon 列存），计算资源采用 Spot 抢占式实例，相比于维持全量高规格 MySQL 物理集群，**每年可为企业节省数百万元的基础设施账单**。
+
+### 9.8 面试现场自然口述示范与一页纸速记卡（Day 24 复盘精华）
+
+#### 经典真题 1：请深度推导 MySQL InnoDB 的 B+Tree 索引物理存储结构。为什么主键推荐使用自增或有序雪花 ID，而严禁使用 UUID？16KB 物理页大小下，一个 3 层的 B+Tree 究竟能存放多少数据？
+
+##### 1. 简洁回答（1分钟电梯破题）
+> “InnoDB 采用**索引组织表（Index-Organized Table, IOT）**，其数据本身就存储在聚簇主键 B+Tree 的叶子节点上。
+> 1. **容量推导（3 层 B+Tree 支撑两千万行数据）**：
+>    - InnoDB 默认物理页大小为 16KB；
+>    - 非叶子节点存放‘主键 + 子节点页指针’：主键 BigInt 占 8 字节，指针占 6 字节，扣除页头开销，一个非叶子页可容纳约 $16384 / 14 \approx 1170$ 个扇出指针；
+>    - 假设叶子节点单行数据平均 1KB，一个叶子数据页可存 16 行；
+>    - 因此 3 层 B+Tree 的最大容量为：$1170 \times 1170 \times 16 \approx 2,190\text{万行}$。访问任意一行仅需 **3 次磁盘 I/O**（根节点常驻内存，实际仅 1~2 次 I/O）；
+> 2. **主键必须严格有序的底层物理根因**：
+>    - 若采用自增或单调递增雪花 ID，新记录总是顺序追加在最后一个数据页尾部，页满时自动开辟新页，**页填充率高达 95% 以上，且零页分裂开销**；
+>    - 若采用无序 UUID，新插入记录随机散落在各个 B+Tree 中间页。当目标页已满时，InnoDB 必须强行申请新页，并将老页中 50% 的数据挪到新页（**昂贵的页分裂 Page Split**），导致大量随机 I/O、磁盘碎片率飙升 40% 以上，写入性能断崖式下跌。”
+
+##### 2. 深入回答（机制推导与边界条件）
+- **页分裂（Page Split）与页合并（Page Merge）的微观代价**：
+  - 发生页分裂时，InnoDB 不仅要在磁盘上分配新 Extent/Page 并移动数据，还必须对当前页和父节点加 X 锁（排他锁），甚至触发 B+Tree 结构变更的 SMO（Structure Modification Operation）。这会导致该索引子树上的所有并发读写全部陷入阻塞排队；
+  - 长期无序写入会导致大量数据页填充率仅为 50% 甚至更低，严重浪费 Buffer Pool 宝贵的内存空间（同样大小的内存只能缓存原本一半的有效数据），引发频繁从磁盘发生置换换页。
+- **二级索引（Secondary Index）回表与覆盖索引优化**：
+  - InnoDB 二级索引叶子节点存放的不是行物理地址，而是**主键值**。因此二级索引查找完整行需要‘先查二级索引树找到主键 $\to$ 再查聚簇索引树找到行数据’，经历两次树遍历（回表）；
+  - **覆盖索引（Covering Index）**：在查询中仅请求二级索引已包含的字段（如联合索引 `(tenant_id, create_time, status)`），InnoDB 直接在二级索引树的叶子节点提取数据直接返回，**彻底跳过聚簇索引回表**，I/O 耗时减少 50% 以上。
+
+##### 3. 架构师/技术管理视角（权衡取舍、SLA与成本）
+- **分库分表主键选型与时序倾斜防范**：
+  在千亿级 IoT 与大数据平台业务中，单调自增 ID 无法支持分布式分库分表。架构师选型必须采用**改进型有序雪花算法（Snowflake ID）**：
+  - 高 41 位为毫秒时间戳（保障整体趋势递增，消除 InnoDB 页分裂）；
+  - 中间 10 位为工作机器 ID，低 12 位为序列号；
+  - **避坑防线**：为防止分布式环境下的“热点写集中在尾部单个分片”，通常在雪花 ID 中嵌入分片键哈希（如将用户 ID 或设备 ID 取模嵌入低位），既兼顾了单表内的局部有序递增，又实现了跨物理库的均匀分片离散，兼顾写入吞吐与检索性能。
+
+---
+
+#### 经典真题 2：请讲透 InnoDB 的 MVCC（多版本并发控制）实现内核。ReadView 的四大核心属性与判定链是怎样的？RC（读已提交）和 RR（可重复读）在生成 ReadView 上的根本差异是什么？RR 级别下 Next-Key Lock 是如何彻底消灭幻读的？
+
+##### 1. 简洁回答（1分钟电梯破题）
+> “InnoDB 的 MVCC 本质是**‘Undo Log 版本链 + 一致性读视图（ReadView）的快照读算法’**，它实现了‘读不阻塞写、写不阻塞读’的高并发：
+> 1. **ReadView 四大核心属性与判定链**：包含 `m_ids`（当前活跃事务 ID 列表）、`min_trx_id`（活跃最小事务 ID）、`max_trx_id`（系统预分配下一个事务 ID）与 `creator_trx_id`（生成视图的事务 ID）。根据记录行的隐式字段 `trx_id`，沿着 Undo 链条回溯：小于 `min_trx_id` 的必定可见；大于等于 `max_trx_id` 的必定不可见；介于中间的若不在 `m_ids` 中则已提交可见，在则未提交不可见；
+> 2. **RC 与 RR 的根本差异**：
+>    - **RC（Read Committed）**：事务中**每一次执行 SELECT 语句时都重新生成一个最新的 ReadView**，因此能读到其他事务刚刚提交的最新修改（导致不可重复读）；
+>    - **RR（Repeatable Read）**：事务仅在**执行第一次 SELECT 语句时生成一个 ReadView**，后续所有查询全程复用该快照，因此无论外部如何提交，自身快照永远一致；
+> 3. **Next-Key Lock 消灭幻读**：在快照读下靠 ReadView 屏蔽新插入数据；在当前读（`SELECT ... FOR UPDATE`）下，InnoDB 启用 **Next-Key Lock（记录锁 + 间隙锁 Gap Lock，左开右闭区间）**，在查询范围内直接锁住记录之间的‘物理间隙’，外部事务试图 `INSERT` 命中该间隙时会被强行阻塞挂起，彻底消灭当前读下的幻读。”
+
+##### 2. 深入回答（机制推导与边界条件）
+- **ReadView 判定四步状态机内核**：
+  当事务尝试读取某一行数据时，提取该行当前的 `DB_TRX_ID`：
+  1. 若 `DB_TRX_ID == creator_trx_id`：当前事务自己修改的数据，直接可见；
+  2. 若 `DB_TRX_ID < min_trx_id`：表示生成 ReadView 时该事务已提交，直接可见；
+  3. 若 `DB_TRX_ID >= max_trx_id`：表示该事务在生成 ReadView 之后才开启，绝对不可见；
+  4. 若 `min_trx_id <= DB_TRX_ID < max_trx_id`：
+     - 若 `DB_TRX_ID` 存在于 `m_ids` 列表中：说明生成 ReadView 时该事务尚未提交，不可见；
+     - 若不存在于 `m_ids` 列表中：说明该事务已经提交，直接可见；
+  - 若不可见，则顺着行记录的隐式回滚指针 `DB_ROLL_PTR` 沿着 Undo Log 链条逐级向前找上一版本，直至找到可见版本；若全不可见则判定该行不存在。
+- **Next-Key Lock 锁降级与加锁规则推导**：
+  - **规则 1**：加锁的基本单位是 Next-Key Lock（前开后闭区间，如 `(4, 8]`）；
+  - **规则 2**：查找过程中访问到的对象才会加锁；
+  - **优化降级 1（唯一索引等值查询）**：给唯一索引加锁时，若记录存在，Next-Key Lock 降级为单纯的**行记录锁（Record Lock）**；若记录不存在，向右遍历到第一个不满足条件的记录，退化为**间隙锁（Gap Lock）**；
+  - **优化降级 2（非唯一索引等值查询）**：向右遍历到最后一个不满足条件的记录时，该边界上的 Next-Key Lock 退化为间隙锁；
+  - **无索引全表加锁灾难**：如果 `UPDATE` 或 `SELECT ... FOR UPDATE` 没有命中任何索引，InnoDB 必须扫描整张聚簇索引，导致**全表所有记录和所有间隙全被加上 Next-Key Lock**，直接等同于锁死整张表，并发写入彻底瘫痪！
+
+##### 3. 架构师/技术管理视角（权衡取舍、SLA与成本）
+- **长事务与 Undo 表空间暴涨治理**：
+  在生产中，研发人员开启事务后进行外部 HTTP 慢调用或长耗时报表计算，会导致事务长达数十分钟不提交。**长事务是数据库的头号杀手**：
+  - 由于该长事务的 ReadView 持续存活，其 `min_trx_id` 极其靠前，导致 InnoDB 的后台 Purge 线程**无法清理任何在此之后生成的 Undo Log**；
+  - Undo 表空间迅速膨胀数十 GB，磁盘打满，且所有并发查询遍历 Undo 链条变长导致全库慢查。
+  - **技术管控防线**：在数据库参数配置 `max_execution_time=5000`（SQL 5秒强杀）；配置巡检探针每分钟监控 `information_schema.innodb_trx`，对事务耗时超过 60 秒的连接自动告警，超过 180 秒自动下发 `KILL`，绝不妥协。
+
+---
+
+#### 经典真题 3：生产突发数据库死锁（Deadlock）或大量事务抛出 `Lock wait timeout exceeded`，作为技术负责人，你的全链路排障定位 SOP 是怎样的？如何从 SQL 优化、分库分表与冷热分离角度建立数据库高可用防踩踏体系？
+
+##### 1. 简洁回答（1分钟电梯破题）
+> “排查数据库锁故障必须遵循**‘30 秒止血定位、结构化日志取证、架构级根治防踩踏’**的三步标准 SOP：
+> 1. **30 秒现场秒级止血**：通过 `SHOW PROCESSLIST` 与查询 `performance_schema.data_lock_waits`，快速找出阻塞全链条的**‘源头持锁事务 ID（blocking_engine_transaction_id）’**，定位对应的 `thread_id` 并立即执行 `KILL` 强制断流解救集群；
+> 2. **事后死锁深度取证**：执行 `SHOW ENGINE INNODB STATUS` 提取最新的死锁事务日志（LATEST DETECTED DEADLOCK），分析两个事务争抢的物理锁类型（如 Gap Lock 与 Insert Intention Lock 冲突）、所持有的索引键值与执行的 SQL；
+> 3. **高可用防踩踏架构体系**：
+>    - **代码层**：业务多表更新严格固定加锁顺序；严禁长事务内包含远程 RPC；
+>    - **数据层**：单表超 2000 万行推行分库分表（ShardingSphere）；
+>    - **冷热分离降本**：通过 Flink CDC 将 30 天以前的冷数据自动归档至 Apache Paimon / Doris，线上 MySQL 仅保留热数据，单表体积控制在 500 万行以内，彻底消除慢查与锁争用。”
+
+##### 2. 深入回答（机制推导与边界条件）
+- **经典死锁产生根因推导（Gap 锁冲突）**：
+  - 场景：两个事务并发往同一间隙插入不存在的数据；
+  - 事务 A 执行 `SELECT * FROM orders WHERE id = 10 FOR UPDATE`（记录 10 不存在，A 获得间隙锁 `(5, 15)`）；
+  - 事务 B 执行 `SELECT * FROM orders WHERE id = 12 FOR UPDATE`（记录 12 也不存在，**间隙锁与间隙锁互相兼容**，B 也成功获得间隙锁 `(5, 15)`）；
+  - 随后事务 A 执行 `INSERT INTO orders(id) VALUES(10)`，需要申请插入意向锁（Insert Intention Lock），被事务 B 的间隙锁阻塞挂起；
+  - 随后事务 B 也执行 `INSERT INTO orders(id) VALUES(12)`，同样被事务 A 的间隙锁阻塞挂起；
+  - **死锁环路形成**：双方互相等待对方释放间隙锁，InnoDB 死锁检测机制（`innodb_deadlock_detect=ON`）介入，计算事务权重，选择回滚 Undo 量较小的事务，抛出 `Deadlock found when trying to get lock`。
+- **生产锁等待定位高阶 SQL（30秒定界神器）**：
+  ```sql
+  -- MySQL 8.0 秒级定位阻塞源头事务与线程
+  SELECT 
+      r.trx_id AS waiting_trx_id,
+      r.trx_mysql_thread_id AS waiting_thread,
+      r.trx_query AS waiting_query,
+      b.trx_id AS blocking_trx_id,
+      b.trx_mysql_thread_id AS blocking_thread,
+      b.trx_query AS blocking_query
+  FROM performance_schema.data_lock_waits w
+  JOIN information_schema.innodb_trx b ON w.blocking_engine_transaction_id = b.trx_id
+  JOIN information_schema.innodb_trx r ON w.requesting_engine_transaction_id = r.trx_id;
+  ```
+
+##### 3. 架构师/技术管理视角（权衡取舍、SLA与成本）
+- **太原供热物联网与电商结算系统的架构治理实践**：
+  在主导物联网大数据底座建设中，面对 10 万设备每分钟遥测数据的写入冲击，如果直接裸写 MySQL，单日产生上亿行记录，即便利加索引，B+Tree 树高暴涨至 5 层以上，Buffer Pool 命中率跌破 30%，大量慢查导致连接池占满和锁等待超时雪崩。我们实施了**“动静分离与冷热分层架构”**：
+  1. **前置削峰**：设备数据通过 Netty + Redis 环形缓冲区聚合，毫秒级点查直读 Redis；
+  2. **分库分表**：在线 MySQL 采用 ShardingSphere 按设备 ID 取模划分为 64 个物理分库，每个物理表严格维持在 300 万行以内，保证索引全部常驻内存；
+  3. **冷热全自动搬家**：利用 Flink CDC 监听 MySQL Binlog，准实时将数据同步写入 Apache Paimon 实时湖仓；每天凌晨执行物理分区 Drop 清理 30 天前的数据（0 秒耗时且零 Undo 碎片），**将核心业务 MySQL 存储开销削减 85%，彻底根治了死锁与慢查事故**。
+
+---
+
+#### Day 24 一页纸速记卡（5 大黄金法则）
+
+```text
+========================================================================================
+                 Day 24：数据库底层与 PostgreSQL/MySQL 事务（速记卡）
+========================================================================================
+【法则一：B+Tree 索引物理组织与主键顺序】
+  - 物理结构：InnoDB 索引组织表，叶子节点挂数据行；16KB 物理页三层 B+Tree 可容纳约 2000 万行。
+  - 主键有序：主键必须自增或单调有序雪花 ID，顺序追加页填充率达 95%；严禁无序 UUID 引发页分裂与碎片。
+  - 覆盖索引：查询字段全被联合索引覆盖时，直接在二级索引叶子取值，彻底消除聚簇索引回表。
+----------------------------------------------------------------------------------------
+【法则二：WAL 预写日志与 2PC 两阶段提交】
+  - 性能本质：内存修改脏页，先顺序写极小 Redo Log / WAL 即可返回提交，随机 I/O 转顺序 I/O。
+  - 崩溃自愈：XA 两阶段提交协调 Redo Log 与 Binlog；Binlog 写完且有 XID，崩溃后通过 Redo 重放持久化。
+----------------------------------------------------------------------------------------
+【法则三：MVCC ReadView 判定与隔离级别差异】
+  - 判定内核：比较行 trx_id 与 ReadView 四大属性（m_ids, min_trx_id, max_trx_id）；不满足回溯 Undo 链。
+  - RC 与 RR：RC 每次执行 SELECT 都重新生成 ReadView；RR 仅在事务首次 SELECT 生成并全程复用。
+  - 治理长事务：长事务挂起导致 min_trx_id 无法推进，Undo 表空间暴涨，必须配置 180s 超时强杀。
+----------------------------------------------------------------------------------------
+【法则四：Next-Key Lock 区间加锁彻底消灭幻读】
+  - 锁的构成：行记录锁（Record Lock）+ 间隙锁（Gap Lock，左开右闭区间），用于当前读防幻读。
+  - 降级规则：唯一索引等值命中降级为行锁；非唯一索引向右遍历退化为间隙锁；无索引更新直接锁全表。
+----------------------------------------------------------------------------------------
+【法则五：死锁 30 秒定位 SOP 与冷热分离降本】
+  - 30秒止血：查 performance_schema.data_lock_waits 抓出 blocking_trx_id，秒级 KILL 线程。
+  - 取证根因：SHOW ENGINE INNODB STATUS 查 LATEST DETECTED DEADLOCK，优化并发加锁顺序。
+  - 冷热分层：在线 MySQL 仅保留 30 天热数据；Flink CDC 归档冷数据至 Paimon 湖仓，降本 80% 杜绝慢查。
+========================================================================================
+```
 
 ---
 

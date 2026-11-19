@@ -5,8 +5,8 @@ module: "01-bigdata"
 category: "03-spark"
 version_target: "Apache Spark 3.5+ / 4.0 趋势"
 doc_status: "已完成"
-learning_status: "未学习"
-status: "未学习"
+learning_status: "学习中"
+status: "学习中"
 importance: "P0"
 last_reviewed: "2026-11-17"
 tags: ["大数据", "Spark", "Shuffle机制", "SortShuffle", "AQE", "内存模型", "数据倾斜", "生产排障", "技术管理"]
@@ -551,6 +551,52 @@ flowchart TD
 > **‘技术负责人绝不能只埋头调参数，更要懂得以制度和指标拉动跨团队协同’**。
 > 很多时候数仓队列打满，根本不是集群小，而是各业务线研发人员缺乏成本意识，随便在调度器里挂几十个每小时全表扫描的无用作业。
 > 通过推行‘技术自适应调优（AQE）打底 + 平台化模型治理防沉沦 + 算力透明账单管人心’的三位一体综合治理，不仅帮企业在不增加一台物理服务器的前提下平稳支撑了 3 倍业务数据增长，更培养出一支具备工程素养与架构审美的高战斗力团队，这才是技术领导者最核心的价值沉淀。”
+
+---
+
+### 9.8 面试现场自然口述示范与一页纸速记卡（Day 06 复盘精华）
+
+#### 口述示范 A：Spark 从代码到执行的 DAG 调度拓扑与宽窄依赖切分机制？SortShuffle 底层工作流程是什么？
+> “Spark 的批处理高性能依赖于它精妙的 DAG 拓扑编译与 Shuffle 归并架构：
+> 1. **DAG 调度与宽窄依赖切分**：
+>    - **窄依赖（Narrow Dependency）**：父 RDD 每个分区最多被子 RDD 的一个分区依赖（如 `map` / `filter`）。多个连续窄依赖可以直接融合到同一个线程中形成流水线执行（Pipeline），无需跨节点传输；
+>    - **宽依赖（Shuffle Dependency）**：父 RDD 每个分区被子 RDD 多个分区依赖（如 `groupByKey` / `join`），必须跨网络打散重组数据；
+>    - **Stage 划分规则**：DAGScheduler 逆向遍历 RDD 血缘图，**只要遭遇一个宽依赖（ShuffleDependency），就切分出一个新的 Stage**。因此一个 Job 会被拆解为多个 ShuffleMapStage 和一个最终的 ResultStage。
+> 2. **SortShuffleManager 底层两阶段（Write & Spill）**：
+>    - **Shuffle Write 阶段**：每个 Map Task 将数据写入内存缓冲区（`PartitionedAppendOnlyMap` 或 `PartitionedPairBuffer`）。当内存达到阈值时，在内存中按 `(Partition_ID, Key)` 排序，溢写（Spill）成一个个有序的临时磁盘分段文件；
+>    - **多路归并（Merge-Sort）**：Task 结束前，将所有溢写的临时文件与内存剩余数据执行多路归并排序，**最终合并收敛为唯一的物理数据文件（`shuffle_X_Y_0.data`）与一个记录每个分区起止偏移量的索引文件（`shuffle_X_Y_0.index`）**；
+>    - **核心收益**：相比早期 HashShuffle 为每个下游 Task 生成独立物理小文件（引发 $M \times R$ 文件句柄暴增与随机 I/O 灾难），SortShuffle 将每个 Task 的输出严格收敛为 2 个物理文件，彻底奠定了大规模批处理的高稳定性。”
+
+#### 口述示范 B：Spark 统一内存模型（Unified Memory Manager）中 Execution 与 Storage 之间“动态借还”的底层状态机裁决逻辑是什么？
+> “从 Spark 1.6+ 开始，内存模型由静态固定配比演进为**统一内存管理（Unified Memory）**：
+> 1. **内存空间划分**：
+>    - Executor 总堆内存扣除 300MB 框架保留内存后，剩余空间默认将 **60% 划为 Unified Memory（统一内存池）**，其余 40% 划为 User Memory（用户代码与 UDF 空间）；
+>    - 统一内存池内部又逻辑对半划分为 **Execution（计算内存，用于 Shuffle/Join/Sort）** 与 **Storage（存储内存，用于 cache/persist/广播变量）**。
+> 2. **动态借还与不可抢占的底层状态机规则**：
+>    - **空闲互借**：若 Storage 空闲，Execution 可以向 Storage 借用内存；反之亦然，极大提升了内存利用率；
+>    - **计算优先原则（Execution is King）**：当双方内存都被打满、此时又有新的计算任务申请 Execution 内存时，**Execution 可以强行将借给 Storage 的内存驱逐索回**（Storage 中被借用的缓存数据直接被踢出内存，若设置了磁盘存储则溢写落盘）；
+>    - **不可反向抢占铁律**：反过来，如果 Storage 想要索回借给 Execution 的空间，**严禁强行踢出 Execution 正在使用的内存**！因为正在排序聚合的 Shuffle 计算一旦被抢占，只能整体报错中断或引发巨量磁盘重算。Storage 必须等待当前 Task 计算完毕主动释放内存后才能收回。”
+
+#### 口述示范 C：生产线上 Task 运行卡死在 99% 的数据倾斜问题如何系统性根治？Spark 3.5+ AQE 自适应执行解决了什么？
+> “数据倾斜是大数据离线批处理中最典型的长尾性能杀手，排查遵循系统化治理组合拳：
+> 1. **数据倾斜排查四步法**：
+>    - 通过 Spark Web UI 定位是哪个 Stage 的哪个 Task 处理的数据量或耗时高出中位数数十倍，锁定倾斜的 Key；
+>    - **场景 1（空值或脏数据聚集）**：若倾斜 Key 集中在 `NULL` 或 `-999`，在关联前通过 `CASE WHEN id IS NULL THEN CONCAT('RAND_', RAND()) ELSE id END` 进行动态加盐随机打散；
+>    - **场景 2（大小表关联倾斜）**：若其中一张表不大（$< 2\text{GB}$），强制使用 `broadcast(small_table)` 转化为 BroadcastHashJoin，直接消灭 Shuffle 阶段；
+>    - **场景 3（双大表高频热点聚合倾斜）**：采用**双重加盐两阶段聚合（Two-Phase Aggregation）**——第一阶段在 Key 后拼接 `0~9` 随机盐做局部预聚合，第二阶段去除随机盐做最终全局汇总；
+>    - **场景 4（单超大热点 Key 拆分 Join）**：将超大热点 Key 单独过滤出来走 Map 端广播 Join，其余普通数据走常规 Shuffle Join，最后 `UNION ALL` 合并。
+> 2. **Spark 3.5+ AQE（自适应查询执行）运行态智能破局**：
+>    - 传统 Spark 只能依赖编译期的静态执行计划，而 **AQE 允许在每个 Stage 运行完毕后，根据 Shuffle Write 的真实统计数据动态重构后续物理执行计划**：
+>    - **动态合并小分区（Coalesce Partitions）**：自动把数百个数据量极小的 Reduce 分区聚合成目标大小（如 64MB），消灭小文件与调度开销；
+>    - **动态切分倾斜分区（Optimize Skew Join）**：一旦检测到某分区体积超出中位数 5 倍，自动将该倾斜分区切成多个子分区并行处理，业务代码无需手动加盐；
+>    - **运行态动态转广播（Dynamic Join Switch）**：若前置过滤后大表实际输出仅剩几 MB，AQE 在运行时自动把 SortMergeJoin 切换为高效的 BroadcastHashJoin。”
+
+#### Day 06 一页纸速记卡
+1. **DAG 依赖与 Stage 划分**：窄依赖（单对单）流水线直通；宽依赖（一对多跨网络 Shuffle）强制切分 Stage；一个 Job 由多个 ShuffleMapStage 和一个 ResultStage 构成。
+2. **SortShuffle 2 个物理文件收敛**：Map 任务内存排序并 Spill 临时段，最终多路归并（Merge-Sort）收敛为单一的 `.data` 数据文件与 `.index` 索引文件，彻底解决小文件句柄爆炸。
+3. **统一内存借还状态机**：`Execution`（计算）与 `Storage`（缓存）动态互借；**计算优先不可抢占**（Execution 可强制逐出 Storage 缓存，Storage 绝不能强抢 Execution 运行内存）。
+4. **数据倾斜治本组合拳**：空值加盐打散 + 小表转 BroadcastJoin + 双大表双重加盐两阶段聚合 + 超大热点 Key 拆分双路 Join。
+5. **Spark 3.5+ AQE 自适应执行**：基于运行态真实 Shuffle 统计量，动态合并小分区（Coalesce） + 动态切分倾斜分区（SkewJoin） + 运行态自动转广播 Join（Dynamic Switch），释放 30%+ 算力。
 
 ---
 

@@ -5,8 +5,8 @@ module: "01-bigdata"
 category: "01-flink"
 version_target: "Apache Flink 1.19+ / 2.0"
 doc_status: "已完成"
-learning_status: "未学习"
-status: "未学习"
+learning_status: "学习中"
+status: "学习中"
 importance: "P0"
 last_reviewed: "2026-11-16"
 tags: ["大数据", "Flink", "状态管理", "Checkpoint", "Exactly-Once", "两阶段提交", "生产排障", "技术管理"]
@@ -508,6 +508,55 @@ flowchart TD
 > **‘永远不要为了架构师自己的技术情怀，用高昂的复杂度去满足伪需求’**。
 > 90% 的实时大屏和报表业务，业务方口头上说‘必须绝对精准’，实际上其本质诉求是‘结果不能重复’，通过 Doris 主键替换或 Redis 去重表就能完美满足，且毫秒级响应深得业务方赞誉；而真正需要 2PC 的仅仅是涉及资金、电表计费和合规审计的 10% 核心链路。将复杂性压缩在最小局部，让全平台大部分链路保持轻量透明与高可用，是数据架构师保障平台长治久安的最核心技术领导力体现。”
 
+---
+
+### 9.8 面试现场自然口述示范与一页纸速记卡（Day 02 复盘精华）
+
+#### 口述示范 A：Flink 状态后端怎么选？状态暴涨撑爆内存怎么系统性治理？
+> “在生产架构中，状态后端的选型必须根据**状态规模与延迟容忍度**进行权衡：
+> 1. **状态后端选型决策**：
+>    - **HashMapStateBackend**：状态以纯 Java 对象形式保存在 TM 堆内存中，零序列化开销、亚毫秒级极致读写延迟。但受限于 JVM 堆大小（通常适用于单任务状态 $< 50\text{GB}$ 的轻量过滤与简单统计），大状态下 GC 停顿剧烈；
+>    - **EmbeddedRocksDBStateBackend**：状态序列化后存放在本地 RocksDB（C++ LSM-Tree）中，支持增量快照，突破堆内存限制（支撑数百 GB 甚至 TB 级状态）。虽有序列化与 JNI 开销（微秒级延迟），但能避免 JVM OOM，是绝大多数企业核心复杂流作业的默认首选；
+>    - **Flink 2.0 存算分离趋势**：引入 Changelog / Disaggregated State，本地只保留热数据缓存，增量日志持续流式写入远程持久化存储，将快照与故障恢复解耦。
+> 2. **状态暴涨与治理四步法**：
+>    - **设置全局 TTL**：所有业务 Keyed State 必须在代码中显式配置 `StateTtlConfig`（如 24 小时过期并启用后台 Cleanup）；
+>    - **数据模型精简**：严禁把包含数十个无用冗余字段的整条 JSON/Avro 对象塞入 ValueState，只提取并序列化聚合计算所需的紧凑数值字段；
+>    - **管控内存边界**：配置 `state.backend.rocksdb.memory.managed: true`，将 RocksDB 的 BlockCache 和 MemTable 纳入 Flink 托管内存硬性预算，避免堆外内存失控导致 K8s Exit 137；
+>    - **大促前动态扩容**：利用 Savepoint 暂停作业，调大并行度重新分配 KeyGroup，横向打散状态压力。”
+
+#### 口述示范 B：异步屏障快照（ABS）机制是怎样工作的？非对齐快照（Unaligned Checkpoint）为什么能打破反压雪崩？
+> “Flink 的容错核心是改良自 Chandy-Lamport 算法的**异步屏障快照（Asynchronous Barrier Snapshotting, ABS）**：
+> 1. **ABS 屏障快照工作机制**：
+>    - JobManager 的 Checkpoint Coordinator 周期性向各个 Source 注入特殊的标记元组——**Checkpoint Barrier**；
+>    - Barrier 随数据流同向向下游流动，严格将事件流划分为快照之前的数据和快照之后的数据；
+>    - 当下游多输入算子（如 Join）收到某个分区的 Barrier 时，如果采用**对齐快照（Aligned Checkpoint）**，它必须暂停处理该已到达分区的数据并放入缓冲区，等待其他所有分区的 Barrier 全部对齐到位；
+>    - 对齐完成后，算子**同步制作本地状态快照引用（仅耗时数毫秒），随即恢复正常数据处理**；后台异步线程负责将快照物理写入远程持久化存储（HDFS/对象存储），整个写入过程零阻塞业务流。
+> 2. **非对齐快照（Unaligned Checkpoint）破局反压雪崩**：
+>    - **对齐快照的致命死穴**：当系统出现严重反压时，网络缓冲区（Channel Buffer）堆满数据，Barrier 根本排不上队、无法向下游推进，导致对齐超时（如连续 10 分钟做不完快照），最终触发作业连锁重启与级联雪崩；
+>    - **非对齐快照核心逻辑**：只要任意输入 Channel 的首个 Barrier 到达，算子**完全不等待对齐，立刻拍摄快照**！
+>    - **落盘内容差异**：不仅持久化算子本地状态，还**将未对齐 Channel 中已经排在 Barrier 前面的在途飞行数据（In-flight Data）以及输出缓冲区中的数据一起打包落盘**；
+>    - **生产落地取舍**：非对齐快照在反压下仍能在数秒内稳妥完成快照，彻底阻断雪崩；代价是快照体积变大（包含在途数据），恢复时需要回放这部分数据。最佳实践是开启自适应降级：`execution.checkpointing.aligned-checkpoint-timeout: 8s`，平时走开销最小的对齐快照，遇到反压超过 8 秒自动降级为非对齐快照。”
+
+#### 口述示范 C：Flink 写入 Kafka 如何实现端到端 Exactly-Once？下游出现脏读怎么解决？2PC 与主键幂等写入怎么取舍？
+> “保障端到端精准一次必须建立在全链路系统工程协同的基础上：
+> 1. **基于 2PC 两阶段提交的 Exactly-Once 闭环**：
+>    - 核心基于 `TwoPhaseCommitSinkFunction` 与 Kafka 事务协调器（Transaction Coordinator）协同：
+>    - **预提交阶段（Pre-Commit）**：作业运行中，Sink 开启 Kafka 事务写入数据；当收到 Barrier 时，Sink 关闭当前事务并开启新事务，同时将旧事务的 `TransactionID` 写入状态并随 Checkpoint 持久化；
+>    - **正式提交阶段（Commit）**：当 Coordinator 确认全拓扑所有算子快照全部成功，向 Sink 发送 RPC 确认消息；Sink 收到后向 Kafka Broker 发送真正的 `COMMIT` 指令。如果中途崩溃重启，从 Checkpoint 状态中恢复未提交的 TransactionID 并重新向 Kafka 发起 Commit，实现无丢无重。
+> 2. **下游读到脏数据事故的根因与根治**：
+>    - **根因**：Kafka 事务在预提交阶段就已经物理写入 Partition 的日志段中。如果下游 Consumer 使用默认的 `isolation.level = read_uncommitted`，就会提前读到未提交数据；一旦 Flink 发生回滚中止事务，下游就产生了脏读和数据重复；
+>    - **根治**：**全链路契约闭环**——Flink 开启 2PC 写入，且**下游 Consumer 必须显式配置 `isolation.level = read_committed`**（只有事务正式写入 COMMIT 标记后，Last Stable Offset LSO 推进，下游才可见）。
+> 3. **2PC vs 主键幂等写入的架构权衡**：
+>    - **2PC 强一致性**：业务无感知、通用强保证，但**数据可见性被绑定死在 Checkpoint 间隔上（有 1~2 分钟延迟）**，且依赖事务协调，高吞吐下运维脆弱；
+>    - **主键幂等写入（Idempotent Upsert）**：如写入 Doris/Redis/HBase，基于业务唯一 ID 进行覆盖写入。优势是**零事务锁开销、极高吞吐、毫秒级实时可见**；缺点是必须有天然主键且无法直接做纯累加聚合；
+>    - **架构师决策原则**：在资金交易、计费清算等 10% 核心合规链路使用 2PC 保障强一致；90% 的实时大屏、风控与业务分析链路，采用‘At-Least-Once + 主键幂等 Upsert’，兼顾吞吐、亚秒级延迟与工程高可用。”
+
+#### Day 02 一页纸速记卡
+1. **状态后端两极与演进**：`HashMap` 内存读写极快（$<50\text{GB}$ 适用，防大状态 GC）；`RocksDB` 本地磁盘存储突破内存上限（支持 TB 级大状态增量快照，微秒级延迟）；演进趋势为 **Changelog 存算分离**。
+2. **ABS 屏障快照四步走**：注入 Barrier $\to$ 沿数据流同向传递 $\to$ 多通道对齐（Aligning） $\to$ 毫秒级同步打快照引用 + 后台异步上传持久化存储（零阻塞数据处理）。
+3. **非对齐快照（Unaligned Checkpoint）破反压**：不等待多通道对齐，首个 Barrier 到达即拍快照；**将通道内飞行在途数据（In-flight data）一并打包落盘**；生产推荐开启超时自适应降级（`aligned-checkpoint-timeout: 8s`）。
+4. **2PC 端到端一致性三要素**：Source 支持重放位点（Kafka Offset） + Flink 算子状态可持久化 + Sink 支持两阶段提交（预提交落盘、快照成功后写 COMMIT 标记）。
+5. **端到端契约与幂等取舍**：下游消费者必须显式配置 `isolation.level: read_committed`，否则依然会脏读；大屏风控等 90% 场景推崇 **‘At-Least-Once + 业务主键幂等覆盖’**（兼顾亚秒延迟与吞吐），仅在资金合规等 10% 核心链路使用 2PC。
 
 ---
 
