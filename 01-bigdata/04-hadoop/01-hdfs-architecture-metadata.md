@@ -5,8 +5,8 @@ module: "01-bigdata"
 category: "04-hadoop"
 version_target: "Apache Hadoop 3.3+ / 3.4+ (含纠删码 EC 与联邦机制)"
 doc_status: "已完成"
-learning_status: "未学习"
-status: "未学习"
+learning_status: "学习中"
+status: "学习中"
 importance: "P0"
 last_reviewed: "2026-11-17"
 tags: ["大数据", "Hadoop", "HDFS", "NameNode", "QJM高可用", "纠删码EC", "小文件治理", "生产排障", "技术管理"]
@@ -630,6 +630,57 @@ flowchart LR
 > “在技术管理与大促保障体系中，必须建立**‘多租户元数据访问的防御性保护墙’**：
 > 1. **大目录物理拆分与权限白名单**：在数仓架构中，禁止任何单个目录下挂载超过 10000 个子分区，必须按‘年/月/日/业务域’进行多级哈希目录切分，降低单次扫描的锁范围；
 > 2. **中台 API 网关代客查询**：业务系统严禁直连 NameNode 执行元数据 Listing，必须通过自研数据中台的元数据服务（基于元数据数据库缓存，如 Atlas 或 Hive Metastore）进行检索，把 90% 的低价值元数据查询阻断在 NameNode 核心中枢之外，誓死捍卫存储底座的高可用 SLA。”
+
+---
+
+### 9.8 面试现场自然口述示范与一页纸速记卡（Day 08 复盘精华）
+
+#### 口述示范 A：HDFS 核心元数据机制（FSImage + EditLog）与 QJM 高可用去脑裂底层是如何工作的？
+> “HDFS 采用 Master-Worker 架构，NameNode 负责全集群目录树管理，其核心机制在于**‘内存快速读写 + 磁盘 WAL 日志 + 基于 Paxos 的日志仲裁 QJM’**：
+> 1. **元数据持久化与 Checkpoint 滚动合并**：
+>    - **内存目录树**：NameNode 在纯内存中维护文件系统命名空间，每个文件/目录/数据块在内存中占固定约 150 字节；
+>    - **EditLog（预写日志）**：每次客户端的创建、重命名、删除等写操作，必须先以追加方式写满 EditLog 并刷盘，才对客户端返回成功；
+>    - **FSImage（全量镜像快照）**：定期由 Standby NameNode 执行 Checkpoint 滚动合并——从 Active NN 拉取最新 EditLog 与旧 FSImage 在内存中重放合并，生成新的 `fsimage.ckpt` 并回传给 Active NN，防止单次启动加载 EditLog 耗时数小时。
+> 2. **基于 QJM（Quorum Journal Manager）的高可用与去脑裂**：
+>    - 部署奇数台（通常 3 或 5 台）JournalNode（JN）形成日志仲裁集群；
+>    - **Epoch 世代单调递增**：Active NameNode 每次当选时，从 ZooKeeper 获得全局自增的 `Epoch Number`。向 JN 写入 EditLog 时必须携带该代数。JN 拒绝任何携带旧 Epoch 的写入请求（Fencing 隔离）；
+>    - **多数派写入原则（Quorum Write）**：每次写入只要满足过半数（$\lfloor N/2 \rfloor + 1$）JN 节点成功，即视为持久化成功；
+>    - **ZKFC 故障自动转移**：ZKFailoverController 监控 NN 健康并争抢 ZK 分布式锁；旧主异常失联时，ZKFC 先通过 SSH/JNI 执行强制隔离（Fencing，如杀死旧进程或切断网络），随后安全选举 Standby 为新 Active，彻底避免脑裂。”
+
+#### 口述示范 B：数仓积累数亿碎片小文件导致 NameNode 频繁 Full GC 甚至 OOM，作为数据平台负责人你如何系统化治理？
+> “治理小文件风暴绝不能等内存爆了才被动救火，必须推行**‘源头拦截、离线自动归并、冷存归档、平台配额计费’四级治理体系**：
+> 1. **计算源头参数兜底（阻止新增增量）**：
+>    - **Spark 端**：必须全局开启 `spark.sql.adaptive.coalescePartitions.enabled = true`，将目标分区大小设为 128MB，消灭小 Task 产出的碎片文件；
+>    - **Hive 端**：开启 `hive.merge.mapfiles = true` 与 `hive.merge.mapredfiles = true`，当平均文件小于 16MB 时自动追加合并任务。
+> 2. **存量碎片自动化合并（治本消化存量）**：
+>    - 每天由自研巡检探针解析 FSImage（通过 `oiv` 工具导出元数据离线分析），生成‘小文件碎片率 Top 100 目录与分区排行榜’；
+>    - 调度引擎在凌晨低峰期自动拉起 Spark 合并任务：通过 `INSERT OVERWRITE TABLE ... SELECT * /*+ COALESCE(N) */` 将碎片分区原子重写为标准 256MB 大文件。
+> 3. **历史冷存 HAR 归档机制（释放元数据）**：
+>    - 对 1 年以上只用于合规审计的历史冷目录，执行 Hadoop Archive 归档打包（`hadoop archive`）；
+>    - 底层将数千万小文件打包收敛为一个大 `.har` 文件，**原本消耗数千万个对象的 NameNode 内存瞬间压降为 1 个文件对象的元数据**，且下游依然可以通过 `har:///` 路径透明访问。
+> 4. **管理与经济机制推进（让成本显性化）**：
+>    - 在自研数据中台上挂载‘存储健康分’与‘小文件账单’，对碎片率超过 30% 的业务团队执行目录 Quota 硬配额限制（`hdfs dfsadmin -setQuota`），超标直接阻断写入，通过组织机制彻底根治小文件风暴。”
+
+#### 口述示范 C：Hadoop 3.x 纠删码（Erasure Coding）相比经典 3 副本能带来多少存储成本节约？其底层读写机制与适用场景是什么？
+> “在百 PB 级大型数仓集群中，纠删码是架构师向管理层兑现**‘存储成本腰斩’的王牌杀手锏**：
+> 1. **存储节约量化测算（以 RS-6-3 为例）**：
+>    - 传统 3 副本模式：存储 100PB 原始数据需要消耗 **300PB 物理磁盘空间（300% 膨胀率）**；
+>    - **Reed-Solomon RS(6, 3) 纠删码**：6 个数据单元配 3 个校验单元，存储 100PB 数据仅需消耗 **150PB 物理空间（150% 膨胀率）**；
+>    - **商业 ROI**：相比 3 副本直接**节约整整 50% 的物理磁盘采购成本与机房电力开销**，对于千台机器的大数据集群，年节省预算可达数百至上千万元。
+> 2. **底层条带化存储与并发读写机制**：
+>    - 传统 3 副本按整个 Block（如 128MB）完整复制；
+>    - EC 采用**条带化存储（Striped Cell，默认单单元 1MB）**：一个大文件逻辑上以 1MB 为步长切碎，轮流分散在 9 台不同的 DataNode 上；
+>    - 读取大文件时，客户端可以并发向 6 台 DataNode 同时发起流式拉取，顺序读吞吐直接拉满。
+> 3. **底层代价与适用场景边界**：
+>    - **代价**：当某台机器坏盘时，传统 3 副本直接网络拷贝即可修复；而 EC 必须跨网络拉取其余 6 台机器的单元并在内存中通过 Vandermonde 矩阵解码重构，修复时会短暂消耗大量 CPU 与跨机架网络带宽；
+>    - **架构师选型铁律**：推行**冷热分层生命周期转换**——3 个月内的活跃增删热数据保持 3 副本以换取极速重构与局部性；3 个月以上的数仓冷数据与归档备份，通过 `hdfs ec -setPolicy` 批量转换为 RS(6, 3)，兼顾极低成本与高容错性。”
+
+#### Day 08 一页纸速记卡
+1. **元数据内存模型与合并**：每个对象约 150 字节纯内存管理；`EditLog` WAL 记录写操作，`FSImage` 序列化快照，Standby NN 周期性拉取合并生成新快照，防止重启加载数小时。
+2. **QJM 去脑裂高可用三防线**：奇数台 JournalNodes + 多数派写入（过半确认） + 递增 `Epoch Number` 拒绝旧主写入（Fencing 隔离） + ZKFC 自动透明切换。
+3. **小文件风暴四级防御体系**：① 计算源头拦截（Spark AQE coalesce 128MB + Hive merge） $\to$ ② 凌晨存量自动化重写合并 $\to$ ③ 历史冷数据 HAR 打包归档（内存元数据压减 99%） $\to$ ④ 目录 Quota 硬配额与部门健康分账单。
+4. **纠删码 EC RS(6, 3) 降本杀手锏**：6 数据块 + 3 校验块，存储膨胀率从 300% 降至 150%（**存储成本直接腰斩 50%**）；默认 1MB 条带化并发读；代价是坏盘网络重构计算开销大。
+5. **NameNode RPC 慢排查标准 SOP**：查 Full GC 停顿 $\to$ 查 JMX `RpcQueueTime`（队列积压说明 Handler 满）与 `RpcProcessTime`（处理耗时说明有大目录锁） $\to$ 分析 Audit Log 抓 Top 1 客户端 $\to$ 启用 Lifeline 独立端口与防火墙隔离。
 
 ---
 
