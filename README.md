@@ -60,6 +60,7 @@ tech-interview-knowledge-base/
 ├── 08-interview-questions/ # 分类面试题库 (基础/原理/场景/系统设计/管理行为题)
 ├── 09-review/              # 错题记录、阶段复习自测与薄弱知识攻坚
 ├── 10-ai-data-engineering/ # 模块10：AI数据架构与非结构化数据工程 (解析/切分/索引/混合检索/RAG评估与闭环)
+├── code-demos/             # 面试实战代码库 (Flink/Spark/Kafka 生产级业务源码与集群部署运维脚本)
 ├── templates/              # 统一文档模板 (技术文档/管理文档/项目复盘模板)
 └── scripts/                # 自动化检查脚本 (结构质量、引用路径与事实隔离三维质检)
 ```
@@ -119,4 +120,5 @@ python3 scripts/verify_knowledge_base.py
 2. 查阅 [PROFILE_FACTS.md](./PROFILE_FACTS.md) 确认个人真实经历基线与待核实清单。
 3. 查看 [PLAN.md](./PLAN.md) 确认当日 90 分钟学习目标（必学/进阶/拓展）。
 4. 打开对应知识点文档（如第一天：[01-flink-runtime-architecture.md](./01-bigdata/01-flink/01-flink-runtime-architecture.md)）进入深度学习。
-5. 学习后在 [PROGRESS.md](./PROGRESS.md) 中更新学习状态，错题写入 [wrong-questions.md](./09-review/wrong-questions.md)。
+5. 针对高频面试手写代码要求，可进入 [code-demos/](./code-demos/README.md) 实操编译并演练集群提交脚本（如 [flink-yarn-demo](./code-demos/flink-yarn-demo/README.md)）。
+6. 学习后在 [PROGRESS.md](./PROGRESS.md) 中更新学习状态，错题写入 [wrong-questions.md](./09-review/wrong-questions.md)。

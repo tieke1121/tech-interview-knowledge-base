@@ -254,6 +254,14 @@ transaction.state.log.min.isr: 2
 transactional.id.expiration.ms: 604800000
 ```
 
+### 4.3 生产代码实操工程（Kafka Exactly-Once 事务管道实战）
+针对技术面试中的现场手写代码（Live Coding）与事务一致性架构考评，本知识库已建立标准的源代码管理工程：
+- **完整源代码工程**：[code-demos/kafka-transaction-demo/](../../code-demos/kafka-transaction-demo/README.md)
+  - 核心事务管道服务：`TransactionalPipelineService.java`（严格实现 `initTransactions`、`beginTransaction`、`sendOffsetsToTransaction` 原子绑定消费位移与 2PC 提交）；
+  - 重平衡安全防御：`SafeRebalanceListener.java`（实现 `CooperativeStickyAssignor` 下的分区撤销感知与挂起事务中断）；
+  - 数据模型与测试：`TransactionRecord.java`、`TransactionalPipelineTest.java`；
+  - 架构答辩手册：系统推导 `__transaction_state` 2PC 时序、LSO 悬挂事务阻塞机制与高频大厂真题三层解答。
+
 ---
 
 ## 5. 生产异常故障深度排查与根因分析

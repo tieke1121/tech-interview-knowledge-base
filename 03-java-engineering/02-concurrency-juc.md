@@ -390,6 +390,15 @@ public class DeviceMetricAggregator {
    - **`LongAdder` 的分段累加设计**：
      JDK 内部的 `LongAdder` 彻底打破了单变量竞争：其内部维护一个 `Cell[]` 数组，每个 `Cell` 对象内部通过 `@Contended` 注解强制将对象填充至 128 字节边界，各线程根据哈希值被离散分摊至不同的 `Cell` 上独立累加，最终读取时求和，**并发性能直接超越普通 `AtomicLong` 10 倍以上**。
 
+### 4.4 生产代码实操工程（高并发线程池与 Redisson 分布式锁实战）
+针对技术面试中的现场手写并发代码与分布式锁攻防考评，本知识库已建立标准的源代码管理工程：
+- **完整源代码工程**：[code-demos/java-distributed-demo/](../code-demos/java-distributed-demo/README.md)
+  - 动态监控线程池：`MonitoredThreadPoolExecutor.java`（实操支持运行态无感热调优 `adjustPoolSize`、慢任务拦截告警与带监控指标的 `LoggingCallerRunsPolicy` 拒绝策略）；
+  - 异步网关编排：`AsyncEnrichmentGatewayService.java`（基于 `CompletableFuture.allOf` 实现多路数据并行补全与 `completeOnTimeout` 毫秒级熔断降级）；
+  - 分布式锁与防超卖：`RedissonDistributedLockService.java`（系统演示 Watchdog 看门狗 30s 自动续期原理与 Lua 脚本单线程原子扣减库存）；
+  - 自动化构建与单元测试：`pom.xml`、`DistributedConcurrencyTest.java`；
+  - 架构答辩手册：系统推导 AQS CLH 双向等待队列、线程池 5 大状态机流转与 Redlock 争议深度剖析。
+
 ---
 
 ## 5. 生产异常故障深度排查与根因分析

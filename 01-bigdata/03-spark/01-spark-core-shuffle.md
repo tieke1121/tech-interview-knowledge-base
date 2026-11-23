@@ -236,6 +236,13 @@ spark.memory.offHeap.enabled: true
 spark.memory.offHeap.size: 4096m
 ```
 
+### 4.3 生产代码实操工程（Spark 3.5+ AQE 与倾斜治理实战）
+针对技术面试中的现场手写代码（Live Coding）与倾斜调优实操考评，本知识库已建立标准的源代码管理工程：
+- **完整源代码工程**：[code-demos/spark-lakehouse-demo/](../../code-demos/spark-lakehouse-demo/README.md)
+  - 核心计算与优化类：`SparkAqeSkewJoinApp.java`（实操对比 Spark 3.5+ AQE 自动切分倾斜 Task、手动加盐两阶段打散 `executeManualSaltingJoin` 与广播 Hash Join `executeBroadcastHashJoin`）；
+  - 自动化构建与单元测试：`pom.xml`、`SparkAqeSkewJoinTest.java`；
+  - 架构答辩手册：系统剖析 AQE 运行时动态重写物理计划、统一内存动态借用与驱逐原则，以及大厂高频 Exit 137 排查 SOP。
+
 ---
 
 ## 5. 生产异常故障深度排查与根因分析

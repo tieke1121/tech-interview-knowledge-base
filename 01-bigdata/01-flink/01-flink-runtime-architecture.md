@@ -211,6 +211,15 @@ taskmanager.memory.jvm-overhead.min: 192m
 taskmanager.memory.jvm-overhead.max: 1024m
 ```
 
+### 4.3 生产代码实操与集群部署脚本工程（Flink on YARN 实战）
+针对技术面试中的现场手写代码（Live Coding）与生产提交实操考评，本知识库已建立标准的源代码管理工程：
+- **完整源代码工程**：[code-demos/flink-yarn-demo/](../../code-demos/flink-yarn-demo/README.md)
+  - 核心旗舰作业入口 1：`DualStreamReconciliationJob.java`（涵盖订单与支付双数据源连接 `connect()`、双流 Watermark 动态对齐 `min(W1, W2)`、空闲分区探测 `withIdleness`、`KeyedCoProcessFunction` 状态协同、事件时间定时器 `EventTime Timer` 超时关单与两级 Side Output 侧道死信路由）；
+  - 核心旗舰作业入口 2：`OrderRiskStreamingJob.java`（涵盖事件时间、Watermark 3 秒乱序容忍、1分钟滚动窗口增量聚合、`allowedLateness` 5 秒迟到重算与 Side Output 侧道路由）；
+  - 数据模型与算子：`OrderPaymentCoProcessFunction.java` 双流定时器算子、`OrderAggFunction.java` 增量聚合、`OrderWindowProcessFunction.java` 窗口元数据补充、`MockOrderSourceFunction.java` 与 `MockPaymentSourceFunction.java` 并发模拟数据源；
+  - 自动化构建与单元测试：`pom.xml`（Maven Shade 打包与 `provided` 依赖隔离）、`DualStreamReconciliationJobTest.java`、`OrderRiskStreamingJobTest.java`；
+  - YARN 一键部署运维脚本：`submit-yarn-application.sh`（支持 Application 模式作业快速切换）、`stop-yarn-job.sh`（带 Savepoint 优雅停机）与 `submit-yarn-session.sh`。
+
 ---
 
 ## 5. 生产异常故障深度排查与根因分析
