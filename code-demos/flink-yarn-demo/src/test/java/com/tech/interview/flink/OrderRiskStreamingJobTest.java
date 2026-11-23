@@ -70,8 +70,8 @@ class OrderRiskStreamingJobTest {
             public void close() {}
         };
 
-        // 构造简易 Mock Context
-        OrderWindowProcessFunction.Context mockContext = new OrderWindowProcessFunction.Context() {
+        // 构造简易 Mock Context (基于 processFunction 封闭实例)
+        OrderWindowProcessFunction.Context mockContext = processFunction.new Context() {
             @Override
             public TimeWindow window() {
                 return mockWindow;
@@ -88,13 +88,13 @@ class OrderRiskStreamingJobTest {
             }
 
             @Override
-            public String windowState() {
-                return "";
+            public org.apache.flink.api.common.state.KeyedStateStore windowState() {
+                return null;
             }
 
             @Override
-            public String globalState() {
-                return "";
+            public org.apache.flink.api.common.state.KeyedStateStore globalState() {
+                return null;
             }
 
             @Override

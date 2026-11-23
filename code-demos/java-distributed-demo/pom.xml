@@ -15,7 +15,7 @@
     <version>1.0.0-SNAPSHOT</version>
     <packaging>jar</packaging>
 
-    <name>Java High Concurrency & Distributed Lock Demo</name>
+    <name>Java High Concurrency &amp; Distributed Lock Demo</name>
     <description>Java 17 JUC 动态监控线程池、CompletableFuture 异步编排与 Redisson 分布式锁实战</description>
 
     <dependencies>
