@@ -879,3 +879,4 @@ graph LR
 3. **Paimon LSM 湖存储架构设计白皮书**：[How Paimon Implements LSM on Lake Storage](https://paimon.apache.org/docs/master/concepts/basic-concepts/)
 4. **Uber Hudi 经典奠基论文**：Shands, M., et al. (2020). *Apache Hudi: Fast Upserts, Streaming Storage on Data Lakes*. Uber Engineering.
 5. **阿里 Flink 实时湖仓演进技术洞察**：[Next Generation Streaming Lakehouse with Apache Paimon](https://ververica.com/blog/)
+6. **本库实操源码工程**：[code-demos/paimon-flink-demo/](../../code-demos/paimon-flink-demo/README.md)（含 Partial-Update 零状态拼宽表、整库 CDC 毫秒入湖与流读单元测试）

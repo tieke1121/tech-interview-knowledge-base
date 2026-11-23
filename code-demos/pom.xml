@@ -17,6 +17,7 @@
         <module>kafka-transaction-demo</module>
         <module>spark-lakehouse-demo</module>
         <module>java-distributed-demo</module>
+        <module>paimon-flink-demo</module>
     </modules>
 
     <properties>
@@ -24,8 +25,9 @@
         <maven.compiler.target>17</maven.compiler.target>
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
         
-        <!-- 组件版本对齐最新主流标准 (Java 17, Flink 1.20.1, Kafka 3.7.0, Spark 3.5.1) -->
+        <!-- 组件版本对齐最新主流标准 (Java 17, Flink 1.20.1, Kafka 3.7.0, Spark 3.5.1, Paimon 0.9.0) -->
         <flink.version>1.20.1</flink.version>
+        <paimon.version>0.9.0</paimon.version>
         <kafka.version>3.7.0</kafka.version>
         <spark.version>3.5.1</spark.version>
         <scala.binary.version>2.13</scala.binary.version>
@@ -103,8 +105,35 @@
             </dependency>
             <dependency>
                 <groupId>org.apache.flink</groupId>
+                <artifactId>flink-connector-files</artifactId>
+                <version>${flink.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>org.apache.flink</groupId>
                 <artifactId>flink-cep</artifactId>
                 <version>${flink.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>org.apache.flink</groupId>
+                <artifactId>flink-table-api-java-bridge</artifactId>
+                <version>${flink.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>org.apache.flink</groupId>
+                <artifactId>flink-table-planner-loader</artifactId>
+                <version>${flink.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>org.apache.flink</groupId>
+                <artifactId>flink-table-runtime</artifactId>
+                <version>${flink.version}</version>
+            </dependency>
+
+            <!-- Apache Paimon 0.9+ -->
+            <dependency>
+                <groupId>org.apache.paimon</groupId>
+                <artifactId>paimon-flink-1.20</artifactId>
+                <version>${paimon.version}</version>
             </dependency>
 
             <!-- Apache Kafka 3.7+ -->
