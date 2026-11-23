@@ -47,13 +47,10 @@ flink-yarn-demo/
 │   │   │   │   ├── PaymentEvent.java            # 支付流水 POJO 模型
 │   │   │   │   ├── ReconcileResult.java         # 双流对账结果 POJO 模型
 │   │   │   │   └── RiskResult.java              # 实时风控指标 POJO 模型
-│   │   │   ├── function/
-│   │   │   │   ├── OrderPaymentCoProcessFunction.java # 双流协同、状态缓存与 EventTime 定时器算子
-│   │   │   │   ├── OrderAggFunction.java        # 增量累加预聚合算子 (AggregateFunction)
-│   │   │   │   └── OrderWindowProcessFunction.java # 窗口处理算子 (ProcessWindowFunction)
-│   │   │   └── source/
-│   │   │       ├── MockOrderSourceFunction.java # 模拟并发订单数据源
-│   │   │       └── MockPaymentSourceFunction.java # 模拟并发支付数据源 (含正常/延迟/丢失)
+│   │   │   └── function/
+│   │   │       ├── OrderPaymentCoProcessFunction.java # 双流协同、状态缓存与 EventTime 定时器算子
+│   │   │       ├── OrderAggFunction.java        # 增量累加预聚合算子 (AggregateFunction)
+│   │   │       └── OrderWindowProcessFunction.java # 窗口处理算子 (ProcessWindowFunction)
 │   │   └── resources/
 │   │       ├── application.properties           # 作业配置参数
 │   │       └── log4j2.properties                # 生产日志配置

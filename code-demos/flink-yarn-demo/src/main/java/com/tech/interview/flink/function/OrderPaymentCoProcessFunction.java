@@ -6,13 +6,14 @@ import com.tech.interview.flink.model.ReconcileResult;
 import org.apache.flink.api.common.state.StateTtlConfig;
 import org.apache.flink.api.common.state.ValueState;
 import org.apache.flink.api.common.state.ValueStateDescriptor;
-import org.apache.flink.api.common.time.Time;
 import org.apache.flink.configuration.Configuration;
 import org.apache.flink.streaming.api.functions.co.KeyedCoProcessFunction;
 import org.apache.flink.util.Collector;
 import org.apache.flink.util.OutputTag;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+
+import java.time.Duration;
 
 /**
  * 订单与支付双流连接协同处理算子 (KeyedCoProcessFunction)
@@ -60,7 +61,7 @@ public class OrderPaymentCoProcessFunction
 
         // 配置 State TTL：生产必备防泄漏规范，保障即便机器极端断电重启也能兜底清理
         StateTtlConfig ttlConfig = StateTtlConfig
-                .newBuilder(Time.hours(2))
+                .newBuilder(Duration.ofHours(2))
                 .setUpdateType(StateTtlConfig.UpdateType.OnCreateAndWrite)
                 .setStateVisibility(StateTtlConfig.StateVisibility.NeverReturnExpired)
                 .build();
