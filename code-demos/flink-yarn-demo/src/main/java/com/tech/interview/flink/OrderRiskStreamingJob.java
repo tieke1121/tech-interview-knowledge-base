@@ -23,6 +23,7 @@ import org.apache.flink.util.OutputTag;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import java.io.Serial;
 import java.time.Duration;
 import java.util.Random;
 
@@ -55,7 +56,8 @@ public class OrderRiskStreamingJob {
 
         // 2. 现代 FLIP-27 数据源 (模拟高并发轻度乱序订单流)
         DataGeneratorSource<OrderEvent> orderSource = new DataGeneratorSource<>(
-                new GeneratorFunction<Long, OrderEvent>() {
+                new GeneratorFunction<>() {
+                    @Serial
                     private static final long serialVersionUID = 1L;
                     private final Random random = new Random();
 

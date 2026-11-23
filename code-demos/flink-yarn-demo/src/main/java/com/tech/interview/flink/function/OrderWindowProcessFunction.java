@@ -5,6 +5,8 @@ import org.apache.flink.streaming.api.functions.windowing.ProcessWindowFunction;
 import org.apache.flink.streaming.api.windowing.windows.TimeWindow;
 import org.apache.flink.util.Collector;
 
+import java.io.Serial;
+
 /**
  * 窗口处理包装函数 (ProcessWindowFunction)
  * 职责分工：与 OrderAggFunction 结合使用。OrderAggFunction 负责高效增量聚合，
@@ -13,6 +15,7 @@ import org.apache.flink.util.Collector;
 public class OrderWindowProcessFunction 
         extends ProcessWindowFunction<OrderAggFunction.OrderAccumulator, RiskResult, String, TimeWindow> {
 
+    @Serial
     private static final long serialVersionUID = 1L;
 
     @Override

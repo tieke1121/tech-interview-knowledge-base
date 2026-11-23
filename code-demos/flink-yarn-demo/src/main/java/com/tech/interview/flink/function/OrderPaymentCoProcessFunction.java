@@ -13,6 +13,7 @@ import org.apache.flink.util.OutputTag;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import java.io.Serial;
 import java.time.Duration;
 
 /**
@@ -28,6 +29,7 @@ import java.time.Duration;
 public class OrderPaymentCoProcessFunction 
         extends KeyedCoProcessFunction<String, OrderEvent, PaymentEvent, ReconcileResult> {
 
+    @Serial
     private static final long serialVersionUID = 1L;
     private static final Logger LOG = LoggerFactory.getLogger(OrderPaymentCoProcessFunction.class);
 

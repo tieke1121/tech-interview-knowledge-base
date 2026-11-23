@@ -3,6 +3,7 @@ package com.tech.interview.flink.function;
 import com.tech.interview.flink.model.OrderEvent;
 import org.apache.flink.api.common.functions.AggregateFunction;
 
+import java.io.Serial;
 import java.io.Serializable;
 
 /**
@@ -12,12 +13,14 @@ import java.io.Serializable;
  */
 public class OrderAggFunction implements AggregateFunction<OrderEvent, OrderAggFunction.OrderAccumulator, OrderAggFunction.OrderAccumulator> {
 
+    @Serial
     private static final long serialVersionUID = 1L;
 
     /**
      * 增量聚合累加器 (POJO)
      */
     public static class OrderAccumulator implements Serializable {
+        @Serial
         private static final long serialVersionUID = 1L;
 
         private double totalAmount = 0.0;

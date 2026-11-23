@@ -21,6 +21,7 @@ import org.apache.flink.streaming.api.environment.StreamExecutionEnvironment;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import java.io.Serial;
 import java.time.Duration;
 import java.util.Random;
 
@@ -49,7 +50,8 @@ public class DualStreamReconciliationJob {
 
         // 2. 数据源 1：订单事件流 (基于 FLIP-27 DataGeneratorSource + env.fromSource)
         DataGeneratorSource<OrderEvent> orderSource = new DataGeneratorSource<>(
-                new GeneratorFunction<Long, OrderEvent>() {
+                new GeneratorFunction<>() {
+                    @Serial
                     private static final long serialVersionUID = 1L;
                     private final Random random = new Random();
 
@@ -82,7 +84,8 @@ public class DualStreamReconciliationJob {
 
         // 3. 数据源 2：支付事件流 (基于 FLIP-27 DataGeneratorSource + env.fromSource)
         DataGeneratorSource<PaymentEvent> paymentSource = new DataGeneratorSource<>(
-                new GeneratorFunction<Long, PaymentEvent>() {
+                new GeneratorFunction<>() {
+                    @Serial
                     private static final long serialVersionUID = 1L;
                     private final Random random = new Random();
 
