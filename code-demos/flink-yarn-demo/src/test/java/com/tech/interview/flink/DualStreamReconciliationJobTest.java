@@ -43,6 +43,34 @@ class DualStreamReconciliationJobTest {
         assertEquals(List.of(15_000L), timeouts.executeAndCollect(2));
     }
 
+    @Test
+    @DisplayName("支付先到并更新时，孤儿侧流保留最新金额及其超时时刻")
+    void replacementPaymentExpiresWithLatestAmount() throws Exception {
+        var env = StreamExecutionEnvironment.getExecutionEnvironment();
+        env.setParallelism(1);
+        var orders = env.fromCollection(List.of(), TypeInformation.of(OrderEvent.class));
+        var payments = env.fromData(
+                new PaymentEvent("P", "A", 100, "ALIPAY", 1_000),
+                new PaymentEvent("P", "A", 80, "ALIPAY", 5_000))
+                .assignTimestampsAndWatermarks(WatermarkStrategy.<PaymentEvent>forMonotonousTimestamps()
+                        .withTimestampAssigner((payment, previous) -> payment.getPayTime()));
+        var orphans = orders.connect(payments)
+                .keyBy(OrderEvent::getOrderId, PaymentEvent::getOrderId)
+                .process(new OrderPaymentCoProcessFunction(10_000))
+                .getSideOutput(OrderPaymentCoProcessFunction.ORPHAN_PAYMENT_TAG)
+                .process(new OrphanPaymentDetails());
+
+        assertEquals(List.of("P,A,80.0,15000"), orphans.executeAndCollect(2));
+    }
+
+    private static class OrphanPaymentDetails extends ProcessFunction<PaymentEvent, String> {
+        @Override
+        public void processElement(PaymentEvent event, Context ctx, Collector<String> out) {
+            out.collect(event.getPaymentId() + "," + event.getOrderId() + ","
+                    + event.getPayAmount() + "," + ctx.timestamp());
+        }
+    }
+
     private static class TimeoutTimestamp extends ProcessFunction<OrderEvent, Long> {
         @Override
         public void processElement(OrderEvent event, Context ctx, Collector<Long> out) {

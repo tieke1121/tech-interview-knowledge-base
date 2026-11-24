@@ -111,7 +111,7 @@ flink-yarn-demo/
   - 低频控制规则流调用 `.broadcast(MapStateDescriptor)` 转化为广播流；
   - 业务流在 `processElement` 中只读规则，广播侧在 `processBroadcastElement` 中更新各并行实例的本地副本。规则与业务事件的到达顺序可能不同；严格的切换时刻需要在记录中约定规则版本。
 - **怎样选择状态结构？** 对同一业务键下的大集合，如果常常只改一个条目，`MapState` 提供逐项访问。在 RocksDB 后端，使用 `ValueState<Map>` 更新整张映射会引入额外序列化。若集合很小且总是整体读写，可直接使用 `ValueState`。扩缩容时，算子列表状态的元素可以重新分摊，union 列表状态则给每个新子任务完整列表。[Flink 状态文档](https://nightlies.apache.org/flink/flink-docs-release-1.20/docs/dev/datastream/fault-tolerance/state/)
-- **订单更新后何时超时？** 双流对账示例给每个订单号保留最后到达的单边记录。订单事件时间先为第 1 秒、后为第 5 秒，等待期为 10 秒。第二条记录会撤销第 11 秒的旧定时器，水位线推进到第 15 秒仍无支付才输出超时。业务若要求“首单起算”或按版本拒绝旧订单，需要单独定义规则。[可运行回归用例](src/test/java/com/tech/interview/flink/DualStreamReconciliationJobTest.java)
+- **订单更新后何时超时？** 双流对账示例给每个订单号保留最后到达的单边记录。订单事件时间先为第 1 秒、后为第 5 秒，等待期为 10 秒。第二条记录会撤销第 11 秒的旧定时器，水位线推进到第 15 秒仍无支付才输出超时。支付先到也遵循相同规则，回归测试验证更新后的金额 80 和第 15 秒的超时戳一起进入孤儿支付侧流。业务若要求“首单起算”或按版本拒绝旧订单，需要单独定义规则。[可运行回归用例](src/test/java/com/tech/interview/flink/DualStreamReconciliationJobTest.java)
 - **异步 I/O（Async I/O）与本地缓存防击穿**：
   - 杜绝在 `map()` 中使用同步阻塞 RPC；
   - 使用 `AsyncDataStream.unorderedWait()` 时，同一水位区间内已完成的请求可先返回。待完成记录仍会阻碍水位线向下游传递。
