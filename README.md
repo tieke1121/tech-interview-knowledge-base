@@ -123,3 +123,7 @@ python3 scripts/verify_knowledge_base.py
 4. 打开对应知识点文档（如第一天：[01-flink-runtime-architecture.md](./01-bigdata/01-flink/01-flink-runtime-architecture.md)）进入深度学习。
 5. 针对高频面试手写代码要求，可进入 [code-demos/](./code-demos/README.md) 实操编译并演练集群提交脚本（如 [flink-yarn-demo](./code-demos/flink-yarn-demo/README.md)）。
 6. 学习后在 [PROGRESS.md](./PROGRESS.md) 中更新学习状态，错题写入 [wrong-questions.md](./09-review/wrong-questions.md)。
+
+## 双角色面试练习
+
+按“面试官提问 → 求职者初答 → 改变条件再追问 → 补充回答 → 评分”练习八轮，覆盖项目证据、正确性、SQL、排障、成本、团队、产品化和 Java 服务。[打开双角色答辩手册](07-project-review/03-interview-defense-playbook.md)
