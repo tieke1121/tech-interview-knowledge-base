@@ -37,7 +37,7 @@
 | [数据库](11-database.md) | 解释索引、快照、锁、日志与 CDC 边界 |
 | [分布式正确性](12-distributed-correctness.md) | 在重复、乱序和崩溃条件下维护业务不变量 |
 
-在仓库根目录运行 `python3 scripts/verify_sql_exercises.py`，可核验 SQL 篇六道题的实际结果。[数据库并发与故障实验](../code-demos/correctness-lab/README.md)已实测通过 13 项，包含 PostgreSQL 锁与隔离、应用进程强杀恢复、去重、墓碑和 fencing；消息传输使用独立事务的持久化表模拟。
+在仓库根目录运行 `python3 scripts/verify_sql_exercises.py`，可核验 SQL 篇六道题的实际结果。[数据库并发与故障实验](../code-demos/correctness-lab/README.md)已实测通过 13 项，包含 PostgreSQL 锁与隔离、应用进程强杀恢复、去重、墓碑和 fencing；消息传输使用独立事务的持久化表模拟。后续[真实 Kafka 故障实验](../code-demos/kafka-fault-lab/README.md)补充 5 项实测及六道实验延伸题，覆盖 Broker 强杀、网络隔离、超时重发和消费提交间隙。
 
 ## 其他岗位能力
 

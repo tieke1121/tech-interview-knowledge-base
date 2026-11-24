@@ -39,3 +39,7 @@ mvn clean package -DskipTests
 ### 4. 数据库并发与应用故障实验
 
 [correctness-lab](correctness-lab/README.md)独立运行于 Python 与临时 PostgreSQL 容器，已通过 13 项实测：库存锁等待、RC/RR、死锁、五个提交间隙的 SIGKILL 恢复、并发幂等、版本墓碑和 fencing。运行命令与原始 JSON 见模块手册。消息传输由持久化表模拟，未验证真实 Kafka Broker 故障。
+
+### 5. 真实 Kafka 故障与网络隔离
+
+[kafka-fault-lab](kafka-fault-lab/README.md)使用三个 Kafka 4.1.1 KRaft 节点，实测 Leader 强杀、网络隔离、多数派丢失、消费库提交后强杀及事务可见性，共 5 项。手册附实测结果与六道双角色延伸题，独立于现有 Java 事务示例运行。

@@ -98,3 +98,5 @@ docker ps -a --filter label=purpose=interview-correctness-lab
 请求负载固定且相同，没有测试“相同 ID、不同参数”冲突处理；没有测试去重记录过期、并发转发器抢占、事件永久失败和短信等外部副作用。生产化需补参数摘要校验、保留期、任务领取与对账协议。
 
 下一次先遮住结果，预测每个提交点崩溃后的六个数字，再运行对照；随后练习解释“投递 2 次、业务生效 1 次”。对应[数据库题集](../../08-interview-questions/11-database.md)和[分布式正确性题集](../../08-interview-questions/12-distributed-correctness.md)。
+
+后续已补充[真实 Kafka 故障实验](../kafka-fault-lab/README.md)，独立验证三节点强杀、网络隔离与消费提交间隙。该实验的外部消费库为 SQLite；本模块的 PostgreSQL 投递表仍保留为事务边界教学对照。

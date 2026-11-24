@@ -3,7 +3,7 @@ id: "interview-distributed-correctness"
 title: "分布式正确性与故障推演双角色练习"
 module: "08-interview-questions"
 category: "distributed-correctness"
-version_target: "Kafka 3.7；Redis 锁与租约；数据库事务及业务协议"
+version_target: "Kafka 4.1.1 实测；Redis 锁与租约；数据库事务及业务协议"
 doc_status: "已完成"
 learning_status: "未学习"
 importance: "P0"
@@ -63,7 +63,31 @@ tags: ["双角色面试", "数据正确性", "故障推演"]
 
 **面试官追问：** 能证明 Kafka 和 Redis 在故障中都正确吗？
 
-**求职者回答：** 本轮验证了应用进程崩溃时的事务边界。传输使用同一 PostgreSQL 上独立提交的表；fencing 使用数据库序列和条件更新。没有启动 Kafka 或注入 Redis 租约故障，也没有测试网络分区、节点断电和短信接口，因此这些边界仍需要对应的集成实验。
+**求职者回答：** 本轮验证了应用进程崩溃时的事务边界。传输使用同一 PostgreSQL 上独立提交的表；fencing 使用数据库序列和条件更新。上述 13 项未启动 Kafka，也未注入 Redis 租约故障。后续补充的真实 Kafka 集成实验见下文；Redis 租约、宿主机断电和短信接口仍需另测。
+
+### 真实 Kafka 故障与网络分区：5 项补充实测
+
+本轮使用 Kafka 4.1.1 三个 KRaft 混合角色节点，单分区三副本、min ISR=2、acks=all。[实验源码与运行手册](../code-demos/kafka-fault-lab/README.md)包含六道双角色延伸题；[实测 JSON](../code-demos/kafka-fault-lab/results/2026-11-24-kafka411.json)保存选主、ISR、发送回调、位点和金额。
+
+| 故障或对照 | 检查的事实 | 实测结论 |
+| --- | --- | --- |
+| 强杀实际分区 Leader | 退出码 137、非 OOM；ISR 从 3 降至 2 再恢复 3 | 新 Leader 接收写入，最终 40 个 ID、金额合计 400，无缺失 |
+| Leader 网络隔离 | 进程仍运行，实验网络已断开；其余两节点选主 | 保留两个 ISR 时继续写入，恢复三副本后完整对账 |
+| 隔离两个节点 | 发送回调超时，恢复后以相同业务 ID 重发 | 已观察到 41 条记录对应 40 个 ID；超时记录可能实际存在 |
+| 消费库提交后、Kafka 位点提交前 SIGKILL | 库中已有金额 10，Kafka 尚无提交位点 | 恢复重读并命中一次去重，10 个业务 ID 最终金额 100，位点 10 |
+| abort/commit 可见性 | 先 abort 5 条，再 commit 5 条 | read_committed 读 5 条，read_uncommitted 读 10 条 |
+
+**求职者回答：** 我会把发送成功、日志存在、消费确认和业务生效分开核对。这次真实实验出现“发送超时、恢复后发现重复记录”，所以不能把超时当成没写入。外部业务去重需要同一事务内的唯一键和状态更新。
+
+**面试官追问：** 那一条重复消息，Kafka 幂等为什么没挡住？
+
+**求职者深入回答：** 恢复时创建了新 Producer，并重新提交相同业务 ID。这是应用重发，协议幂等不会根据业务 ID 自动去重。本次另用 SQLite 验证了真实消费提交间隙：数据库已提交而 Kafka 位点未提交，重读后跳过金额更新；这不等于已验证 Kafka 与远端 PostgreSQL 的联合故障。
+
+**面试官追问：** 进程活着就能算服务恢复了吗？
+
+**求职者深入回答：** 不能。首轮网络隔离时，新 Leader 已出现，但原客户端仍报交付超时。脚本明确连接探测、元数据刷新和交付预算后重跑通过。应该分别检查集群选主、客户端发送成功和业务积压追平。
+
+**架构师视角：** 当前混合角色部署隔离两个节点时，也失去 Controller 多数派，不能把拒写只归因于 min ISR。发布验收应分别测控制面和数据面，按租户限制重试与积压。保留业务 ID 对账，恢复后逐项检查；本机少量输入不提供生产容量或 P99 结论。
 
 ## 5. 生产异常故障深度排查与根因分析
 
@@ -204,4 +228,4 @@ tags: ["双角色面试", "数据正确性", "故障推演"]
 
 [Kafka 设计](https://kafka.apache.org/37/design/design/) · [Redis 分布式锁](https://redis.io/docs/latest/develop/clients/patterns/distributed-locks/) · [事务 Outbox](https://docs.aws.amazon.com/prescriptive-guidance/latest/cloud-design-patterns/transactional-outbox.html)
 
-本轮实测范围、环境与观察结果见第 4 节。Kafka Broker、Redis 租约、网络分区与数据库节点故障仍需在真实组件上另做验证。
+本轮已验证 Kafka Broker 强杀及 Docker 网络隔离，范围见第 4 节。Redis 租约、单向网络丢包、数据库节点故障与宿主机断电仍待验证。[Kafka 4.1 Broker 配置](https://kafka.apache.org/41/configuration/broker-configs/) · [Producer 配置](https://kafka.apache.org/41/configuration/producer-configs/)

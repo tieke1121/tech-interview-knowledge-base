@@ -1,4 +1,4 @@
-# Kafka 生产级分布式事务与精准一次 (EOS) 管道工程 (kafka-transaction-demo)
+# Kafka 事务与精准一次 (EOS) 教学管道 (kafka-transaction-demo)
 
 > 本工程面向 **数据平台研发负责人 / 大数据架构师** 岗位面试中的“全链路 Exactly-Once 实操”、“跨系统事务一致性”与“Kafka 深度故障排查”考察。  
 > 通过一套完整的 **Consume-Transform-Produce（消费-清洗-生产）** 事务闭环，深入推导底层 2PC 协议、事务协调器（Transaction Coordinator）与高频面试真题。
@@ -8,10 +8,10 @@
 ## 一、业务场景与架构设计
 
 在金融支付、资产对账与实时特征处理场景中，必须杜绝由于网络重试导致的数据重复，以及消费者 Crash 导致的数据漏处理或双写不一致：
-- **上游消费**：从原始交易 Topic 拉取消息，配置 `isolation.level=read_committed`，仅拉取已提交的合法事务；
+- **上游消费**：从原始交易 Topic 拉取消息，配置 `isolation.level=read_committed`，过滤已中止事务，读取已提交事务及可见的非事务消息；
 - **核心转换**：进行严格的防重审计与数据规整；
 - **下游生产与位移提交原子绑定**：使用 `producer.sendOffsetsToTransaction(offsets, groupMetadata)`，将**输出 Topic 的消息写入**与**输入 Topic 的位移提交**绑定在同一个两阶段提交（2PC）事务中；
-- **重平衡防御**：配置 `CooperativeStickyAssignor`（协作粘性重平衡）与 `SafeRebalanceListener`，杜绝传统 Eager 模式下的全量 Stop-The-World 与脏提交。
+- **重平衡防御**：配置 `CooperativeStickyAssignor`（协作粘性重平衡）与 `SafeRebalanceListener`，减少不必要的分区撤销；事务提交与撤销处理仍需正确实现。
 
 ---
 
@@ -77,24 +77,28 @@ sequenceDiagram
 ```
 
 ### 2. 核心底层机制要点（面试答题杀手锏）：
-- **僵尸实例隔离（Zombie Fencing）**：当老实例发生长时间 GC 暂停或网络分区后恢复，其 Epoch 已经落后于 Coordinator 中的最新 Epoch。任何后续操作将立即被抛出 `ProducerFencedException` 拒绝，防止旧实例写入脏数据破坏一致性。
+- **僵尸实例隔离（Zombie Fencing）**：同一 `transactional.id` 的新实例完成初始化后，旧实例的身份可能已被隔离；旧实例恢复请求时会遭遇 fencing 等致命错误，应终止旧实例。单纯发生 GC 暂停或断网不意味着 epoch 必然已经变化，异常形式还需结合具体 API 与客户端版本。
 - **LSO（Last Stable Offset）与水位控制**：
   - 在 `read_committed` 模式下，Consumer 最多只能拉取到 **LSO**，而不是传统的高水位（HW）。
-  - LSO 等于第一个尚未结束（未 Commit 也未 Abort）的事务消息的位移。如果有一个长事务一直挂起，下游 Consumer 的消费进度将被阻塞在 LSO 处，这也是生产中必须严密监控**事务持续时间（transaction.timeout.ms）**的根因。
+  - 存在未结束事务时，LSO 受最早未结束事务位置限制，且不超过高水位；没有未结束事务时可推进到高水位。如果有一个长事务一直挂起，下游 Consumer 的消费进度将被阻塞在 LSO 处，这也是生产中必须严密监控**事务持续时间（transaction.timeout.ms）**的根因。
 - **生产者内存缓冲区架构**：
-  - `RecordAccumulator`（记录累加器）以 `ProducerBatch`（默认 16KB/64KB）为最小单元。
-  - 通过 `BufferPool` 实现堆外内存块的循环复用，避免频繁申请/释放造成的 JVM 堆内存碎片和 GC 压力。
+  - Java Producer 按分区累积消息形成批次，批次预算由 `batch.size` 等配置约束；不能把不同版本或客户端的默认值混用。
+  - Java Producer 的 `BufferPool` 复用批次缓冲区；不能把它泛称为堆外内存池。应结合具体客户端版本检查分配与内存预算。
 
 ---
 
 ## 四、高频互联网大厂真题与三层应答示范
 
-### Q1：为什么仅开启 `enable.idempotence=true` 无法解决跨会话和多分区的数据重复？必须上分布式事务？
-- **简洁回答**：幂等性（Idempotence）仅保障**单分区、单 Producer 实例单次生命周期内**的无重复无乱序；一旦 Producer 重启或需要跨多个分区原子落盘，PID 会重新分配且跨分区缺乏协同，必须借助 Transactional ID 与 Transaction Coordinator 统一做两阶段提交。
-- **深入回答**：幂等 Producer 依赖 Broker 在内存中维护每个 `<PID, Partition>` 的最近 5 条序列号（Sequence Number）。一旦 Producer 重启，由于没有持久化的业务 ID，Broker 分配全新 PID，原有去重缓存失效；另外，幂等机制无法跨越多个 Topic/Partition 进行协同。事务机制引入了持久化的 `transactional.id`，存储在 `__transaction_state` 内部 Topic 中，使得重启后能延续 Epoch 校验，并用 2PC 协议协同多个分区的原子提交。
-- **架构师/管理视角**：开启分布式事务会引入约 15%~30% 的延迟开销（因为增加了多次向 Coordinator 的网络交互与 Commit Marker 写入）。技术决策上，对于金融账务、核心计费必须坚决开启事务 + `read_committed`；而对于日志埋点、用户轨迹等允许极低概率重复的场景，应仅采用“幂等 Producer + 下游业务唯一主键/RocksDB 幂等去重”，兼顾高吞吐与 ROI。
+### Q1：开启幂等或 Kafka 事务之后，业务重试还会重复吗？
+- **简洁回答**：会。幂等发送约束生产协议重试，Kafka 事务协调其边界内的消息及位点；重新提交相同业务请求仍需稳定业务 ID 和业务去重。
+- **深入回答**：Kafka 用生产者身份、epoch 与分区序列协调重试和旧实例隔离。稳定的 `transactional.id` 支持事务恢复及 fencing，但不会自动比较业务负载。Consume-Transform-Produce 应把输出记录和输入位点放入同一事务；外部数据库需自己的事务或幂等机制。
+- **架构师/管理视角**：先明确一致性边界，再选择普通幂等生产、Kafka 事务或外部数据库去重。事务延迟取决于批次、网络和副本确认，不能套用未经测量的固定百分比。[生产者配置](https://kafka.apache.org/41/configuration/producer-configs/)
 
 ### Q2：Kafka 消费者发生 Rebalance 时，为什么容易出现大量重复消费？新版本 Cooperative Sticky 机制是如何优化的？
 - **简洁回答**：传统 Eager Rebalance 要求所有消费者先全量注销（Revoke）已持有的分区，引发全组 Stop-The-World；若在此期间未提交位移，新分配的节点将从上次 Commit 点重复拉取。Cooperative Sticky（协作粘性）采用两阶段渐进式重平衡，未受影响的分区全程不停机，仅剥夺迁移变动的分区，将重复与抖动降到最低。
 - **深入回答**：传统 Eager 协议下，只要组内有一台机器闪断，所有正常消费者必须停止消费并全部重新加入组。如果单批处理时间长且业务处理后才提交位移，全量重新分配会导致大量已处理但未提交的消息被重新消费。CooperativeStickyAssignor 引入了协作机制：第一轮只协商需要迁移的分区集合并精准剥夺（其余分区继续消费）；第二轮仅把剥夺的分区分配给新节点。
-- **架构师/管理视角**：在生产配置规范中，必须执行两项强制约束：一是配置 `partition.assignment.strategy` 为 `CooperativeStickyAssignor`；二是在代码中实现 `ConsumerRebalanceListener`，在 `onPartitionsRevoked` 触发时同步落盘并提交位移。同时合理调大 `max.poll.interval.ms`，杜绝因为下游慢 SQL/长 RPC 误触发假死离组。
+- **架构师/管理视角**：结合客户端与消费组协议选择分配策略；使用协作式分配时验证渐进撤销行为。事务管道的位点要与输出一起提交，不能在撤销回调中随意独立提交。根据最长处理时间设置 poll 预算，并对慢 SQL、远端调用和重试设置上限。
+
+## 五、真实故障实验入口
+
+[Kafka 故障实验](../kafka-fault-lab/README.md)独立验证三节点 Leader 强杀、节点网络隔离、多数派丢失、外部数据库提交间隙与事务可见性。它没有运行本 Java 管道，不能将其结果当作本模块端到端事务测试已通过的证据。
