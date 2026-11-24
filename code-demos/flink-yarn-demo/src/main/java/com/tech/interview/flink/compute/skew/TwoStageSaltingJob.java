@@ -1,5 +1,6 @@
 package com.tech.interview.flink.compute.skew;
 
+import org.apache.flink.api.common.eventtime.WatermarkStrategy;
 import org.apache.flink.api.common.functions.AggregateFunction;
 import org.apache.flink.api.common.functions.MapFunction;
 import org.apache.flink.api.common.typeinfo.TypeInformation;
@@ -10,38 +11,29 @@ import org.apache.flink.connector.datagen.source.GeneratorFunction;
 import org.apache.flink.streaming.api.datastream.DataStream;
 import org.apache.flink.streaming.api.environment.StreamExecutionEnvironment;
 import org.apache.flink.streaming.api.functions.windowing.ProcessWindowFunction;
-import org.apache.flink.streaming.api.windowing.assigners.TumblingProcessingTimeWindows;
+import org.apache.flink.streaming.api.windowing.assigners.TumblingEventTimeWindows;
 import org.apache.flink.streaming.api.windowing.windows.TimeWindow;
 import org.apache.flink.util.Collector;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 
 import java.io.Serial;
 import java.io.Serializable;
 import java.time.Duration;
+import java.util.Locale;
 import java.util.Random;
 
 /**
- * 【计算端核心考点：大促极端数据倾斜治理 —— 流式两阶段加盐聚合 (Two-Stage Key Salting)】
- * 
- * 核心架构考点：
- * 1. 业务痛点：
- *    - 大促或头部主播直播间场景，单店铺 (如 SHOP_SUPER_HOT) 产生全平台 90% 订单；
- *    - 若直接 keyBy(shopId)，该单 key 会被哈希路由至单一 Subtask，导致该 TaskManager CPU 100%、GC 频繁并引发全链路反压雪崩；
- * 2. 两阶段加盐治理范式：
- *    - 阶段一 (加盐局部打散)：将原始 Key 拼接随机盐值 keyBy(shopId + "_" + random(0, 10))，将热点流量均匀打散至 10 个桶中进行局部微批预聚合；
- *    - 阶段二 (去盐全局还原)：截除随机盐值后缀恢复原始 shopId，由全局窗口进行二次归并汇总；
- * 3. 注意事项：
- *    - 在事件时间窗口下，加盐阶段的窗口触发会使数据重新打乱，阶段一与阶段二的触发协同必须紧凑，推荐阶段一采用微批 (MiniBatch) 或轻量滑动窗口。
+ * 将热点店铺分散到五个盐桶，各桶先按事件时间汇总，再按店铺合并。
+ * 局部窗口结果的时间戳为窗口结束时间减一毫秒，两个阶段使用相同的窗口边界。
  */
 public class TwoStageSaltingJob {
 
-    private static final Logger LOG = LoggerFactory.getLogger(TwoStageSaltingJob.class);
+    private static final Duration WINDOW_SIZE = Duration.ofSeconds(3);
 
     public static class SkewedOrder implements Serializable {
         @Serial
         private static final long serialVersionUID = 1L;
 
+        private long eventTime;
         private String shopId;
         private double amount;
 
@@ -52,6 +44,8 @@ public class TwoStageSaltingJob {
             this.amount = amount;
         }
 
+        public long getEventTime() { return eventTime; }
+        public void setEventTime(long eventTime) { this.eventTime = eventTime; }
         public String getShopId() { return shopId; }
         public void setShopId(String shopId) { this.shopId = shopId; }
         public double getAmount() { return amount; }
@@ -93,7 +87,9 @@ public class TwoStageSaltingJob {
                     @Override
                     public SkewedOrder map(Long value) {
                         String shop = (random.nextInt(100) < 90) ? "SHOP_SUPER_HOT" : "SHOP_REGULAR_" + random.nextInt(5);
-                        return new SkewedOrder(shop, 10.0 + random.nextDouble() * 50.0);
+                        SkewedOrder order = new SkewedOrder(shop, 10.0 + random.nextDouble() * 50.0);
+                        order.setEventTime(System.currentTimeMillis());
+                        return order;
                     }
                 },
                 Long.MAX_VALUE,
@@ -101,9 +97,15 @@ public class TwoStageSaltingJob {
                 TypeInformation.of(SkewedOrder.class)
         );
 
-        DataStream<SkewedOrder> sourceStream = env
-                .fromSource(skewedSource, org.apache.flink.api.common.eventtime.WatermarkStrategy.noWatermarks(), "Skew-Source");
+        WatermarkStrategy<SkewedOrder> watermarks = WatermarkStrategy
+                .<SkewedOrder>forBoundedOutOfOrderness(Duration.ofSeconds(1))
+                .withTimestampAssigner((order, previousTimestamp) -> order.getEventTime());
+        aggregateByShop(env.fromSource(skewedSource, watermarks, "Skew-Source")).print();
+        env.execute("Two-Stage Key Salting Skew Mitigation Job");
+    }
 
+    /** 输入流携带订单事件时间与 watermark。 */
+    public static DataStream<String> aggregateByShop(DataStream<SkewedOrder> sourceStream) {
         // 2. 阶段一：加盐局部打散 (加 0~4 随机盐，将单 key 拆分为 5 个独立计算通道)
         DataStream<SaltedOrder> saltedStream = sourceStream.map(new MapFunction<SkewedOrder, SaltedOrder>() {
             @Serial
@@ -120,18 +122,14 @@ public class TwoStageSaltingJob {
         // 局部预聚合 (3秒滚动窗口)
         DataStream<SkewedOrder> localAggStream = saltedStream
                 .keyBy(SaltedOrder::getSaltedKey)
-                .window(TumblingProcessingTimeWindows.of(Duration.ofSeconds(3)))
+                .window(TumblingEventTimeWindows.of(WINDOW_SIZE))
                 .aggregate(new LocalSumAggFunction(), new LocalProcessWindowFunction());
 
         // 3. 阶段二：去盐全局还原汇总 (3秒滚动窗口)
-        DataStream<String> globalAggStream = localAggStream
+        return localAggStream
                 .keyBy(SkewedOrder::getShopId)
-                .window(TumblingProcessingTimeWindows.of(Duration.ofSeconds(3)))
+                .window(TumblingEventTimeWindows.of(WINDOW_SIZE))
                 .aggregate(new GlobalSumAggFunction(), new GlobalProcessWindowFunction());
-
-        globalAggStream.print();
-
-        env.execute("Two-Stage Key Salting Skew Mitigation Job");
     }
 
     // 局部增量聚合
@@ -170,7 +168,7 @@ public class TwoStageSaltingJob {
         @Override
         public void process(String shopId, Context context, Iterable<Double> elements, Collector<String> out) {
             double total = elements.iterator().next();
-            out.collect(String.format("🌟 [Global Balanced Agg] ShopId=%s FinalTotal=%.2f WindowEnd=%d",
+            out.collect(String.format(Locale.ROOT, "🌟 [Global Balanced Agg] ShopId=%s FinalTotal=%.2f WindowEnd=%d",
                     shopId, total, context.window().getEnd()));
         }
     }

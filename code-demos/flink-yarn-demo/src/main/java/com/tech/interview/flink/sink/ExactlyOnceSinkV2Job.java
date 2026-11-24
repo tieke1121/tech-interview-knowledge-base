@@ -20,20 +20,8 @@ import java.time.Duration;
 import java.util.*;
 
 /**
- * 【Sink 端核心考点：现代 SinkV2 架构与端到端 Exactly-Once 两阶段提交 (2PC)】
- * 
- * 核心架构考点：
- * 1. 现代 SinkV2 解耦架构 (FLIP-191)：
- *    - 彻底废弃旧版 TwoPhaseCommitSinkFunction；
- *    - 写入与提交解耦：Sink (拓扑入口) + SinkWriter (并发写/预提交) + Committer (事务全局提交)；
- * 2. 两阶段提交 2PC 状态机流转：
- *    - 阶段一 (Pre-commit): Checkpoint Barrier 穿过 SinkWriter 时触发 prepareCommit()，
- *      将当前在途数据生成事务快照凭据 (TransactionalPayload) 保存到 Checkpoint 状态，并滚动开启下一段新事务；
- *    - 阶段二 (Commit): JobManager 收集全算子 ACK 并确认 Checkpoint 成功后，广播通知 Committer
- *      执行 commit() 正式使外部数据可见；若有故障则触发 abort() 回滚；
- * 3. 生产超时协同死锁防范：
- *    - Kafka 事务最大超时 transaction.max.timeout.ms (默认 15m) 必须 > Flink Checkpoint 超时加上故障恢复耗时；
- *    - 下游必须配置 isolation.level=read_committed，屏蔽未提交事务脏读。
+ * 演示 Sink V2 的预提交与提交回调。Writer 汇总批次，Committer 将凭据写入日志。
+ * 若要对外部系统实现精准一次，该系统还需持久化待提交的数据，并能安全重试同一凭据。
  */
 public class ExactlyOnceSinkV2Job {
 
@@ -142,7 +130,7 @@ public class ExactlyOnceSinkV2Job {
             implements CommittingSinkWriter<OrderEvent, TransactionalPayload> {
 
         private final int subtaskIndex;
-        private final List<OrderEvent> transactionBuffer = new ArrayList<>();
+        private int eventCount;
         private String currentTxnId;
         private double runningAmount = 0.0;
 
@@ -157,7 +145,7 @@ public class ExactlyOnceSinkV2Job {
 
         @Override
         public void write(OrderEvent element, Context context) {
-            transactionBuffer.add(element);
+            eventCount++;
             runningAmount += element.getAmount();
         }
 
@@ -171,19 +159,19 @@ public class ExactlyOnceSinkV2Job {
          */
         @Override
         public Collection<TransactionalPayload> prepareCommit() {
-            if (transactionBuffer.isEmpty()) {
+            if (eventCount == 0) {
                 return Collections.emptyList();
             }
 
             TransactionalPayload payload = new TransactionalPayload(
-                    currentTxnId, transactionBuffer.size(), runningAmount
+                    currentTxnId, eventCount, runningAmount
             );
 
             LOG.info(">>> [2PC Phase 1: Pre-Commit] Subtask {} frozen Txn: {} (count={}, amount={})",
                     subtaskIndex, currentTxnId, payload.getEventCount(), payload.getTotalAmount());
 
             // 滚动开启下一段新事务
-            this.transactionBuffer.clear();
+            this.eventCount = 0;
             this.runningAmount = 0.0;
             this.currentTxnId = generateNewTxnId();
 
@@ -192,7 +180,6 @@ public class ExactlyOnceSinkV2Job {
 
         @Override
         public void close() {
-            transactionBuffer.clear();
         }
     }
 
@@ -206,7 +193,7 @@ public class ExactlyOnceSinkV2Job {
             for (CommitRequest<TransactionalPayload> request : requests) {
                 TransactionalPayload committable = request.getCommittable();
                 // 模拟向下游存储 (Kafka 事务 / 数据库两阶段提交) 正式提交
-                LOG.info("✅ [2PC Phase 2: Final Commit] Downstream txn committed: {}", committable);
+                LOG.info("✅ [2PC Phase 2: Final Commit] Simulated commit: {}", committable);
             }
         }
 
@@ -241,6 +228,9 @@ public class ExactlyOnceSinkV2Job {
 
         @Override
         public TransactionalPayload deserialize(int version, byte[] serialized) throws IOException {
+            if (version != VERSION) {
+                throw new IOException("Unsupported committable version: " + version);
+            }
             ByteArrayInputStream bais = new ByteArrayInputStream(serialized);
             DataInputStream in = new DataInputStream(bais);
             String txnId = in.readUTF();

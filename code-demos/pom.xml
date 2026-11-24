@@ -25,7 +25,7 @@
         <maven.compiler.target>17</maven.compiler.target>
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
         
-        <!-- 组件版本对齐最新主流标准 (Java 17, Flink 1.20.1, Kafka 3.7.0, Spark 3.5.1, Paimon 0.9.0) -->
+        <!-- 教学示例锁定的组件版本 (Java 17, Flink 1.20.1, Kafka 3.7.0, Spark 3.5.1, Paimon 0.9.0) -->
         <flink.version>1.20.1</flink.version>
         <paimon.version>0.9.0</paimon.version>
         <kafka.version>3.7.0</kafka.version>

@@ -1,7 +1,6 @@
-# Flink 生产级流计算实战工程：Source、计算、Sink 全生命周期架构 (flink-yarn-demo)
+# Flink 流计算实战工程
 
-> 本工程面向 **数据平台研发负责人 / 大数据架构师 / 技术总监** 岗位面试中的“实时流计算全特性实操”、“Source/计算/Sink 全链路概念覆盖”、“零废弃现代 Flink 1.20+ / 2.0 规范”与“YARN 集群生产部署运维”考察。  
-> 涵盖 10 个完整的生产级实战作业、覆盖 Flink 所有的核心代码概念、单元测试 100% 绿灯且经 `-Xlint:deprecation` 零警告校验。
+用 Flink 1.20.1 和 Java 17 演练数据接入、事件时间、状态和输出。内置数据由生成器产生，两个自定义 Sink 以日志展示回调。YARN 提交脚本用于已有集群。
 
 ---
 
@@ -77,8 +76,8 @@ flink-yarn-demo/
 │   │   │       └── TwoStageSaltingJob.java      # 大促热点两阶段加盐打散与全局汇总
 │   │   │
 │   │   ├── sink/                                # 【Sink 端核心实现】
-│   │   │   ├── ExactlyOnceSinkV2Job.java        # 现代 SinkV2 两阶段提交 (2PC) 事务状态机闭环
-│   │   │   └── IdempotentBatchingSinkJob.java   # 现代 SinkV2 微批缓冲攒批写入与主键幂等去重
+│   │   │   ├── ExactlyOnceSinkV2Job.java        # SinkV2 凭据生成与提交回调演练
+│   │   │   └── IdempotentBatchingSinkJob.java   # SinkV2 批内按键去重与定时输出
 │   │   │
 │   │   ├── metrics/                             # 【横向切面监控】
 │   │   │   └── CustomMetricsJob.java            # Counter/Gauge/MeterView 指标度量与反压公式剖析
@@ -86,7 +85,7 @@ flink-yarn-demo/
 │   │   ├── model/                               # 核心实体模型 (OrderEvent, PaymentEvent, ReconcileResult 等)
 │   │   └── function/                            # 算子实现类 (OrderPaymentCoProcessFunction 等)
 │   │
-│   └── test/java/com/tech/interview/flink/      # 全量单元测试 (10 个测试用例，100% 绿灯)
+│   └── test/java/com/tech/interview/flink/      # 算子、窗口与凭据序列化测试
 │       ├── DualStreamReconciliationJobTest.java # 双流对账测试
 │       ├── OrderRiskStreamingJobTest.java       # 增量风控窗口测试
 │       ├── PunctuatedWatermarkTest.java         # 标点式 Watermark 测试
@@ -129,26 +128,15 @@ flink-yarn-demo/
 - **复杂事件处理（Flink CEP）**：
   - 采用非确定有限状态自动机（NFA），利用 `SharedBuffer` 共享状态树避免笛卡尔积状态膨胀；
   - 必须设置 `within(Duration)` 进行状态剪枝，通过 `TimedOutPartialMatchHandler` 捕获超时未达成的部分匹配模式（如连续登录失败但超时未转账）；
-- **极端数据倾斜治理（Two-Stage Key Salting）**：
-  - 阶段一：原始 Key 拼接随机盐值 `keyBy(shopId + "_" + random(N))` 进行局部微批预聚合；
-  - 阶段二：剥离盐值还原原始 Key，由全局窗口进行二次归并汇总，彻底化解单 TaskManager 100% CPU 瓶颈。
+- **热点店铺聚合**。按店铺加盐后先做 3 秒事件时间局部求和，再按原店铺进入相同边界的窗口。Flink 把局部结果的时间戳设为窗口末端减 1 毫秒，随后才转发 Watermark。即使第二阶段晚收到，它仍计入原窗口。聚合函数应可合并，示例使用默认零允许迟到。[Flink 连续窗口](https://nightlies.apache.org/flink/flink-docs-release-1.20/docs/dev/datastream/operators/windows/)
 
 ---
 
-### 3. 【Sink 端】现代 SinkV2 架构与端到端 Exactly-Once
-- **现代 SinkV2 解耦架构（FLIP-191）**：
-  - 彻底摒弃已被官方废弃的 `TwoPhaseCommitSinkFunction` 与 `RichSinkFunction`；
-  - 实现 `Sink<InputT>` 与 `SupportsCommitter<CommT>`；
-  - 写入逻辑收敛在 `SinkWriter`，最终提交逻辑收敛在 `Committer`，生命周期清晰解耦；
-- **两阶段提交（2PC）状态机闭环**：
-  - *Phase 1 (Pre-commit)*：Checkpoint Barrier 到达 SinkWriter，触发 `prepareCommit()` 生成事务凭据持久化进快照；
-  - *Phase 2 (Final Commit)*：JobManager 确认所有算子 Checkpoint 成功后通知 Committer 执行 `commit()`；若故障则触发回滚；
-  - *超时约束*：Kafka `transaction.max.timeout.ms` 必须严格大于 Flink Checkpoint 超时加上故障恢复耗时；下游配置 `read_committed`；
-- **微批缓冲与幂等写入（Idempotent Sink）**：
-  - 内存队列按批次大小（如 500 条）和时间间隔（如 1000ms）双触发微批写入；
-  - 基于业务主键 `orderId` 幂等覆盖，实现高吞吐下的等效 Exactly-Once。
+### 3. Sink V2 的提交与重试
 
----
+`ExactlyOnceSinkV2Job` 在 Writer 中计算当前批次的条数和金额，`prepareCommit()` 生成可序列化凭据，Committer 打印收到的凭据。练习时解释如何把提交回调接到真实事务系统：持久化待提交的数据，提交失败后按同一事务 ID 重试，并能识别“已经提交但确认丢失”。
+
+`IdempotentBatchingSinkJob` 按订单号在批内保留最后一条记录，积满 50 个不同键或定时器满 1 秒时输出日志。跨批重放需要下游按同一业务键执行幂等写入，旧事件晚到时还需用业务版本阻止其覆盖新值。
 
 ### 4. 【横向切面】可观测性与反压公式
 - **四大度量类型**：`Counter`（累加计数）、`Gauge`（瞬时队列/内存）、`MeterView`（实时 TPS）、`Histogram`（P99 延迟）；
@@ -179,16 +167,4 @@ flink-yarn-demo/
 
 ## 五、编译与质量验证保障
 
-本工程全量代码均通过以下三级质检：
-1. **Javac 废弃检查（`-Xlint:deprecation`）**：
-   ```bash
-   mvn clean compile -Dmaven.compiler.showDeprecation=true -Dmaven.compiler.compilerArgument=-Xlint:deprecation
-   ```
-   **结果：24 个源文件全部通过，0 警告，0 错误**。
-2. **全量单元测试（`mvn clean test`）**：
-   覆盖 Source、Compute、Sink 核心逻辑，10 个测试用例全部绿灯。
-3. **知识库自动化三维质检**：
-   ```bash
-   python3 scripts/verify_knowledge_base.py
-   ```
-   确保 0 失效引用、0 本机绝对路径硬编码。
+在本模块目录执行 `mvn clean verify`，验证 Java 编译、打包和回归测试。其中的乱序订单用例同时覆盖局部加盐与全局合并。回到仓库根目录执行 `python3 scripts/verify_knowledge_base.py`，检查知识文档结构、题号对应关系和相对链接。

@@ -1,7 +1,6 @@
 # 技术面试实战源代码管理库 (Code Demos)
 
-> 本目录用于系统管理技术面试、上机实操（Live Coding）与白板演练所需的生产级真实业务代码工程与部署运维脚本。  
-> 杜绝纯理论“纸上谈兵”，全面对齐现代化工程标准（Java 17、Maven 多模块管理、容器化与分布式集群部署）。
+> 使用 Java 17 和 Maven 在本地演练面试中的机制问题。各模块说明列出了输入、可观察的结果和集群运行条件。
 
 ---
 
@@ -9,11 +8,11 @@
 
 | 模块目录 | 技术栈与版本 | 核心业务场景 | 核心底层机制与高频面试考点 |
 | :--- | :--- | :--- | :--- |
-| **[flink-yarn-demo](./flink-yarn-demo/README.md)** | Apache Flink 1.19+ / Java 17 | 1. 订单与支付双流对账与超时关单预警<br/>2. 电商高并发实时交易风控指标聚合 | 多数据源协同 (Connect)、Watermark 动态对齐 (`min(W1, W2)`)、空闲分区探测 (`withIdleness`)、事件时间定时器 (EventTime Timer)、两级侧道输出 (Side Output)、增量聚合与 RocksDB 增量快照、YARN Application 模式一键提交运维 |
+| **[flink-yarn-demo](./flink-yarn-demo/README.md)** | Apache Flink 1.19+ / Java 17 | 1. 订单与支付双流对账与超时关单预警<br/>2. 电商高并发实时交易风控指标聚合 | 多数据源协同 (Connect)、多输入 Watermark 取最小值 (`min(W1, W2)`)、空闲分区探测 (`withIdleness`)、事件时间定时器 (EventTime Timer)、两级侧道输出 (Side Output)、增量聚合与 RocksDB 增量快照、YARN Application 模式一键提交运维 |
 | **[kafka-transaction-demo](./kafka-transaction-demo/README.md)** | Apache Kafka 3.7+ / Java 17 | 金融账务流水流转与跨 Topic 精准一次转换 | 幂等性与分布式事务（2PC）、Transaction Coordinator、`read_committed` 隔离级别、Rebalance 重平衡监听器与零拷贝参数调优 |
 | **[spark-lakehouse-demo](./spark-lakehouse-demo/README.md)** | Apache Spark 3.5+ / Scala 2.13 | 湖仓一体实时链路与严重倾斜日志清洗 | 自适应查询执行（AQE 动态合并与倾斜 Join 优化）、广播 Hash Join 阈值控制、Shuffle Spill 机制与内存统一分配模型 |
-| **[paimon-flink-demo](./paimon-flink-demo/README.md)** | Apache Paimon 0.9+ / Flink 1.20.1 / Java 17 | 1. Partial-Update 零状态多流拼宽表<br/>2. 全库 CDC 毫秒入湖与 input Changelog 透传<br/>3. 流式 Changelog 增量订阅消费 (去 Kafka 化)<br/>4. Append-Only 纯追加归档与小文件自动合并 | LSM-Tree on Lakehouse、四大 Merge Engine（deduplicate, partial-update, aggregation, first-row）、四大 Changelog Producer（none, input, lookup, full-compaction）、Flink Checkpoint 与 Paimon Snapshot 原子协同、写合分离（Write-only + 异步 Compactor）治理 |
-| **[java-distributed-demo](./java-distributed-demo/README.md)** | Java 17 / Redisson 3.28+ | 高吞吐数据补全网关与防超卖库存扣减 | 生产级动态监控线程池、`CompletableFuture` 异步编排与超时熔断降级、Redisson 看门狗分布式锁与 Lua 脚本原子原子操作 |
+| **[paimon-flink-demo](./paimon-flink-demo/README.md)** | Apache Paimon 0.9.0 / Flink 1.20.1 / Java 17 | 1. Partial-Update 按订单拼宽表<br/>2. 单表模拟 CDC 与 input Changelog 透传<br/>3. 从快照启动增量订阅<br/>4. Append-Only 纯追加归档与小文件自动合并 | LSM-Tree on Lakehouse、四大 Merge Engine（deduplicate, partial-update, aggregation, first-row）、四大 Changelog Producer（none, input, lookup, full-compaction）、Flink Checkpoint 与 Paimon Snapshot 原子协同、写合分离（Write-only + 异步 Compactor）治理 |
+| **[java-distributed-demo](./java-distributed-demo/README.md)** | Java 17 / Redisson 3.28+ | 高吞吐数据补全网关与防超卖库存扣减 | 生产级动态监控线程池、`CompletableFuture` 异步编排与超时熔断降级、Redisson 看门狗分布式锁与 Lua 脚本原子操作 |
 
 ---
 
@@ -33,7 +32,6 @@ cd code-demos
 mvn clean package -DskipTests
 ```
 
-### 3. 设计哲学与面试落地要求
-1. **真实生产级语义**：代码必须包含真实容错机制（如事务提交、异常重试、迟到数据分流、背压防护、快照状态落盘），严禁仅写 Demo 级别的简单打印。
-2. **依赖隔离规范**：遵循流计算与分布式系统打包标准，宿主集群已包含的依赖统一标记为 `provided`，通过 `maven-shade-plugin` 打出极轻量 Fat JAR。
-3. **运维脚本自闭环**：每个分布式计算模块均配备开箱即用的 Shell 部署运维脚本（涵盖集群提交、状态查询、Savepoint 触发与优雅停机）。
+### 3. 从示例验证面试答案
+
+先执行 `mvn test`。Flink 的两阶段加盐测试把乱序订单放在相邻的两个窗口，检查合计金额是否仍归到正确店铺与时间段。Paimon 的 CDC 测试运行示例入口，随后从快照读取最终余额。部署到集群时，依赖打包方式、存储路径与提交命令以对应模块说明为准。

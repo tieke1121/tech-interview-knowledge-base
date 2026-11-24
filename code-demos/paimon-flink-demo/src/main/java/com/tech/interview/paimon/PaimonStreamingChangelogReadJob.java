@@ -12,19 +12,7 @@ import org.slf4j.LoggerFactory;
 
 import java.io.File;
 
-/**
- * 【Paimon + Flink 核心实战三：流式 Changelog 增量消费与去 Kafka 化】
- * 
- * 核心架构考点：
- * 1. 架构革新：将 Paimon 作为流式消息队列替代 Kafka：
- *    - 既有 Kafka 的流式低延迟增量订阅能力，又有对象存储的廉价持久化能力与批处理 SQL 分析能力；
- * 2. 多样化流读模式 (Scan Mode)：
- *    - latest-full (默认): 首次启动先流读最新全量数据（包含当前快照），随后持续无缝接收增量 Changelog；
- *    - latest: 仅消费作业启动之后的最新增量变更；
- *    - from-snapshot / from-timestamp: 支持流式回溯到几天前、几个月前的历史快照点重新消费；
- * 3. 完整的增量流语义：
- *    - 流式读取还原出完整的 RowKind (+I, -U, +U, -D)，下游可以直接驱动实时聚合、同步 ElasticSearch/Doris 或触发微服务事件。
- */
+/** 从订单宽表的当前快照启动，再订阅后续变更。可回放的范围取决于快照与变更日志的保留策略。 */
 public class PaimonStreamingChangelogReadJob {
 
     private static final Logger LOG = LoggerFactory.getLogger(PaimonStreamingChangelogReadJob.class);
@@ -37,11 +25,13 @@ public class PaimonStreamingChangelogReadJob {
         EnvironmentSettings settings = EnvironmentSettings.newInstance().inStreamingMode().build();
         StreamTableEnvironment tEnv = StreamTableEnvironment.create(env, settings);
 
-        String warehouseDir = System.getProperty("java.io.tmpdir") + File.separator + "paimon_warehouse";
+        String warehouseDir = args.length == 0
+                ? new File(System.getProperty("java.io.tmpdir"), "paimon_warehouse").toURI().toString()
+                : args[0];
 
         // 1. 注册 Catalog
         tEnv.executeSql(String.format(
-                "CREATE CATALOG paimon_catalog WITH ('type' = 'paimon', 'warehouse' = '%s')", warehouseDir));
+                "CREATE CATALOG paimon_catalog WITH ('type' = 'paimon', 'warehouse' = '%s')", warehouseDir.replace("'", "''")));
         tEnv.executeSql("USE CATALOG paimon_catalog");
 
         // 2. 流式订阅 Paimon 宽表 (使用 SQL Hint 动态指定流读参数)

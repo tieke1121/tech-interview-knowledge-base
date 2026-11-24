@@ -19,20 +19,8 @@ import java.util.*;
 import java.util.concurrent.*;
 
 /**
- * 【Sink 端核心考点：现代 SinkV2 微批缓冲攒批写入、优雅排空与主键幂等去重】
- * 
- * 核心架构考点：
- * 1. 为什么不能单条写入外部存储：
- *    - 实时流每秒几万条，如果单条发起 RPC 写入 MySQL/ClickHouse/HBase，外部存储连接池与磁盘瞬间被打爆；
- * 2. 现代 SinkV2 批次攒批机制：
- *    - 摒弃已废弃的旧版 SinkFunction/RichSinkFunction，全面升级为 SinkV2 SinkWriter；
- *    - 数量阈值 (Batch Size): 累积达到 500 条立即触发批量刷写；
- *    - 时间阈值 (Flush Interval): 达到 1000ms 未满批次强制触发定时刷写，兼顾高吞吐与低延迟；
- * 3. 幂等写入设计哲学 (Idempotency)：
- *    - 基于业务唯一主键 orderId 在内存及下游做 UPSERT (如 MySQL ON DUPLICATE KEY UPDATE、Redis HSET、ClickHouse ReplacingMergeTree)；
- *    - At-Least-Once + 业务主键幂等 = 等效端到端 Exactly-Once (超高吞吐场景下的首选妥协架构)；
- * 4. 优雅停机与排空 (Graceful Drain)：
- *    - 在 close() 与 flush(true) 触发时排空剩余在途数据，避免进程退出时滞留数据丢失。
+ * 演示按 50 个不同订单键或 1 秒触发批次输出。示例在内存中按键覆盖，输出为日志。
+ * 对外部表重试时，需要在存储端用主键及业务版本实现幂等写入。
  */
 public class IdempotentBatchingSinkJob {
 
@@ -145,7 +133,7 @@ public class IdempotentBatchingSinkJob {
             }
 
             // 模拟批量执行 UPSERT 写入下游存储
-            LOG.info("🚀 [SinkV2 Batch Flushed] Idempotently written {} records to downstream database. Sample: {}",
+            LOG.info("🚀 [SinkV2 Batch Flushed] Simulated upsert of {} records. Sample: {}",
                     batchToFlush.size(), batchToFlush.get(0).getOrderId());
         }
 

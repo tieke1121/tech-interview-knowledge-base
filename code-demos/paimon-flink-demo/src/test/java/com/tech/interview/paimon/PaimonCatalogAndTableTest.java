@@ -3,6 +3,7 @@ package com.tech.interview.paimon;
 import org.apache.flink.configuration.Configuration;
 import org.apache.flink.streaming.api.environment.StreamExecutionEnvironment;
 import org.apache.flink.table.api.EnvironmentSettings;
+import org.apache.flink.table.api.TableEnvironment;
 import org.apache.flink.table.api.TableResult;
 import org.apache.flink.table.api.bridge.java.StreamTableEnvironment;
 import org.apache.flink.types.Row;
@@ -12,6 +13,7 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
 import java.io.File;
+import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.List;
 
@@ -19,6 +21,21 @@ import static org.junit.jupiter.api.Assertions.*;
 
 @DisplayName("Apache Paimon 与 Flink 整合核心功能单元测试")
 public class PaimonCatalogAndTableTest {
+
+    @Test
+    @DisplayName("CDC 示例写入五条变更后只保留更新过的账户")
+    void cdcJobPreservesUpdatesAndDeletes(@TempDir Path warehouse) throws Exception {
+        String warehouseUri = warehouse.toUri().toString();
+        PaimonCdcIngestionJob.main(new String[]{warehouseUri});
+        var batch = TableEnvironment.create(EnvironmentSettings.inBatchMode());
+        batch.executeSql("CREATE CATALOG lake WITH ('type'='paimon', 'warehouse'='" + warehouseUri + "')");
+        try (var rows = batch.executeSql("SELECT user_id, balance FROM lake.`default`.user_account_cdc_table").collect()) {
+            Row remainingAccount = rows.next();
+            assertEquals("1001", remainingAccount.getField(0));
+            assertEquals(800.0, remainingAccount.getField(1));
+            assertFalse(rows.hasNext());
+        }
+    }
 
     @Test
     @DisplayName("测试 Paimon Catalog 注册与 Partial-Update 主键表创建及写入")

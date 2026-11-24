@@ -15,7 +15,7 @@
     <packaging>jar</packaging>
 
     <name>Paimon Flink Streaming Lakehouse Demo</name>
-    <description>Apache Paimon 与 Flink 深度整合流式湖仓实战工程：Partial-Update 零状态多流拼宽表、整库 CDC 毫秒入湖与流式 Changelog 消费</description>
+    <description>Apache Paimon 与 Flink 深度整合流式湖仓实战工程：Partial-Update 拼宽表、单表模拟 CDC 入湖与流式 Changelog 消费</description>
 
     <properties>
         <main.class>com.tech.interview.paimon.PaimonPartialUpdateWideTableJob</main.class>

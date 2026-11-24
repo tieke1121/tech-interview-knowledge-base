@@ -9,21 +9,7 @@ import org.slf4j.LoggerFactory;
 
 import java.io.File;
 
-/**
- * 【Paimon + Flink 核心实战四：Append-Only 纯追加流式归档与小文件治理】
- * 
- * 核心架构考点：
- * 1. Append-Only 表设计适用场景：
- *    - 用户点击行为流、系统安全审计日志、IoT 传感器高频流水等“只增不改”的超大吞吐日志场景；
- *    - 无主键排序与合并开销，写入性能达到物理存储峰值（比 Primary Key 表快数倍）；
- * 2. 小文件治理与合并参数调优：
- *    - 实时流每 10 秒写入一次 Checkpoint 会产生大量碎片 Parquet 小文件；
- *    - 配置 'compaction.min.file-num' = '5' 与 'compaction.max.file-num' = '10'：
- *      后台自动探测并合并碎片文件为 128MB 以上标准 Parquet 文件，避免查询端元数据打爆与 HDFS NameNode 崩溃；
- * 3. 快照生命周期治理：
- *    - 配置 'snapshot.time-retained' = '2 h' 与 'snapshot.num-retained.min' = '10'：
- *      自动过期并物理删除历史无效快照与废弃数据文件，防止存储空间无限泄漏。
- */
+/** 把持续生成的审计记录写入无主键的追加表，定期提交快照。 */
 public class PaimonAppendOnlyAuditJob {
 
     private static final Logger LOG = LoggerFactory.getLogger(PaimonAppendOnlyAuditJob.class);
@@ -32,15 +18,18 @@ public class PaimonAppendOnlyAuditJob {
         Configuration conf = new Configuration();
         StreamExecutionEnvironment env = StreamExecutionEnvironment.getExecutionEnvironment(conf);
         env.setParallelism(2);
+        env.enableCheckpointing(5000);
 
         EnvironmentSettings settings = EnvironmentSettings.newInstance().inStreamingMode().build();
         StreamTableEnvironment tEnv = StreamTableEnvironment.create(env, settings);
 
-        String warehouseDir = System.getProperty("java.io.tmpdir") + File.separator + "paimon_warehouse";
+        String warehouseDir = args.length == 0
+                ? new File(System.getProperty("java.io.tmpdir"), "paimon_warehouse").toURI().toString()
+                : args[0];
 
         // 1. 注册 Catalog
         tEnv.executeSql(String.format(
-                "CREATE CATALOG paimon_catalog WITH ('type' = 'paimon', 'warehouse' = '%s')", warehouseDir));
+                "CREATE CATALOG paimon_catalog WITH ('type' = 'paimon', 'warehouse' = '%s')", warehouseDir.replace("'", "''")));
         tEnv.executeSql("USE CATALOG paimon_catalog");
 
         // 2. 创建 Append-Only 审计日志表 (配置小文件自动合并与快照自动淘汰)
@@ -53,11 +42,10 @@ public class PaimonAppendOnlyAuditJob {
                 "  cost_ms BIGINT," +
                 "  event_time TIMESTAMP(3)" +
                 ") WITH (" +
-                "  'write-mode' = 'append-only'," +            // 核心：纯追加写入模式
-                "  'file.format' = 'parquet'," +               // 底层存储格式采用高压缩比 Parquet
-                "  'compaction.min.file-num' = '5'," +         // 最少累积 5 个小文件触发合并
-                "  'compaction.max.file-num' = '10'," +        // 最多一次合并 10 个小文件
-                "  'snapshot.time-retained' = '2 h'," +        // 快照保留 2 小时，自动物理清理过期文件
+                "  'file.format' = 'parquet'," +               // 采用 Parquet 列式文件
+                "  'compaction.min.file-num' = '5'," +         // 达到目标大小时，至少 5 个文件才触发合并
+                "  'compaction.max.file-num' = '10'," +        // 累积 10 个时即使未达目标大小也可触发合并
+                "  'snapshot.time-retained' = '2 h'," +        // 按时间淘汰快照，同时受保留数量等条件约束
                 "  'snapshot.num-retained.min' = '10'" +       // 最少保留 10 个有效版本快照
                 ")"
         );
@@ -83,6 +71,6 @@ public class PaimonAppendOnlyAuditJob {
                 "INSERT INTO security_audit_log_table " +
                 "SELECT trace_id, client_ip, api_path, http_status, cost_ms, event_time " +
                 "FROM src_audit_generator"
-        );
+        ).await();
     }
 }
