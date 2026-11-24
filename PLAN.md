@@ -25,7 +25,7 @@
 
 ## 基础补强安排
 
-按用户当前范围，依次复习 Linux、网络和 Docker，Kubernetes 暂缓。每篇沿用 90 分钟时段，先读机制，再口述两题与核对一组命令输出。完成这三篇后继续加强 SQL 与数据库、分布式正确性。实际进度依据本人作答更新。
+按用户当前范围，依次复习 Linux、网络和 Docker，Kubernetes 暂缓。每篇沿用 90 分钟时段，先读机制，再口述两题与核对一组命令输出。随后依次练习 [SQL 与建模](08-interview-questions/10-sql-modeling.md)、[数据库](08-interview-questions/11-database.md)、[分布式正确性](08-interview-questions/12-distributed-correctness.md)。SQL 先手写再执行核对；数据库画两会话时间线；分布式逐个注入崩溃条件并说明恢复。实际进度依据本人作答更新。
 
 ## 阶段规划概览
 
