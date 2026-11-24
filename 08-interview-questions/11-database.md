@@ -43,6 +43,26 @@ tags: ["双角色面试", "数据正确性", "故障推演"]
 
 普通快照读的另一个实验是 A 在 RR 事务中首次 SELECT 得到 1，B 更新为 2 并提交，A 再做普通一致性 SELECT 仍为 1。A 换成 RC 时第二次读得到 2。此例 A 没有自身写入，表使用 InnoDB，开始前明确设置隔离级别；锁定读另行推演。
 
+### PostgreSQL 已运行的对应实验
+
+2026-11-24 在独立 PostgreSQL 17.11 容器中完成以下验证，运行方法与完整证据见[实验手册](../code-demos/correctness-lab/README.md)及[原始结果](../code-demos/correctness-lab/results/2026-11-24-postgres17.json)。上面的 MySQL/InnoDB 时序仍需在目标引擎验证。
+
+| 实验 | 实测结果 | 能说明什么 |
+| --- | --- | --- |
+| RC 条件扣减，A 提交 | 观察到 B 等锁；B 影响 0 行，最终库存 0 | UPDATE 中的条件在等待结束后参与判定 |
+| RC 条件扣减，A 回滚 | 观察到 B 等锁；B 影响 1 行，最终库存 0 | 未提交扣减不被当作最终业务结果 |
+| RC 两次普通查询 | 先读 1，再读到 B 已提交的 2 | 此场景的语句快照变化 |
+| RR 两次普通查询 | 两次都读 1 | 此场景沿用事务快照 |
+| 两事务反向更新两行 | 一方收到 40P01，一方提交；两行都只增加一次 | 死锁受害事务的前序写入也未保留 |
+
+**面试官追问：** 你怎样证明第二个事务真的等过锁？
+
+**求职者回答：** 脚本先让 A 持锁，再在另一个连接执行 B 的 UPDATE，查询数据库活动视图确认 B 的等待类型为 Lock 后才释放 A。不是根据程序耗时猜测。死锁用两方屏障形成等待环，并检查数据库错误码和最终数据。
+
+**面试官追问：** 这能证明库存系统已经正确了吗？
+
+**求职者回答：** 证明了这里单行条件扣减的并发行为。订单与库存原子提交、重复请求、跨库补偿和高负载性能还需各自验证，不能把一个通过的用例扩大成整个业务系统的保证。
+
 ## 5. 生产异常故障深度排查与根因分析
 
 慢查询先分锁等待、执行耗时与客户端传输；事务失败区分死锁、锁等待超时、唯一约束冲突和序列化失败。CDC 延迟查源端日志位置、连接器进度、下游提交和日志保留期。
@@ -184,4 +204,4 @@ tags: ["双角色面试", "数据正确性", "故障推演"]
 
 [InnoDB 锁](https://dev.mysql.com/doc/refman/8.4/en/innodb-locking.html) · [一致性读](https://dev.mysql.com/doc/refman/8.4/en/innodb-consistent-read.html) · [死锁处理](https://dev.mysql.com/doc/refman/8.4/en/innodb-deadlocks-handling.html) · [PostgreSQL 17 隔离级别](https://www.postgresql.org/docs/17/transaction-iso.html)
 
-按照标注版本核对参数和语义。数据库并发与分布式故障部分为协议推演，需在目标引擎及真实连接器上另做验证。
+PostgreSQL 并发实测见第 4 节；MySQL/InnoDB、CDC 和数据库节点故障尚未实测。机制依据见 [PostgreSQL 显式锁与死锁](https://www.postgresql.org/docs/17/explicit-locking.html)。

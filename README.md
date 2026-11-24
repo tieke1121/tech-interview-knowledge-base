@@ -10,7 +10,7 @@
 
 新增 [Linux](08-interview-questions/07-linux.md)、[网络](08-interview-questions/08-network.md)、[Docker](08-interview-questions/09-docker.md)三篇，共 18 道双角色练习，与原六方向 36 题配合复习。
 
-另补 [SQL 与建模](08-interview-questions/10-sql-modeling.md)、[数据库](08-interview-questions/11-database.md)、[分布式正确性](08-interview-questions/12-distributed-correctness.md)三篇 18 题。分类题库合计 12 篇、72 题；SQL 六题附可运行输入和结果核验脚本。
+另补 [SQL 与建模](08-interview-questions/10-sql-modeling.md)、[数据库](08-interview-questions/11-database.md)、[分布式正确性](08-interview-questions/12-distributed-correctness.md)三篇 18 题。分类题库合计 12 篇、72 题；SQL 六题附可运行输入和结果核验脚本。[数据库并发与故障实验](code-demos/correctness-lab/README.md)另有 13 项实测结果，包含 PostgreSQL 并发与应用进程崩溃恢复。
 
 ## 一、项目背景与学习者画像
 

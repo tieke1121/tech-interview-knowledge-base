@@ -1,6 +1,6 @@
 # 技术面试实战源代码管理库 (Code Demos)
 
-> 使用 Java 17 和 Maven 在本地演练面试中的机制问题。各模块说明列出了输入、可观察的结果和集群运行条件。
+> Java 模块使用 Java 17 和 Maven，数据库并发实验使用 Python 与 Docker，在本地演练面试中的机制问题。各模块说明列出了输入、可观察的结果和集群运行条件。
 
 ---
 
@@ -35,3 +35,7 @@ mvn clean package -DskipTests
 ### 3. 从示例验证面试答案
 
 先执行 `mvn test`。Flink 的两阶段加盐测试把乱序订单放在相邻的两个窗口，检查合计金额是否仍归到正确店铺与时间段。Paimon 的 CDC 测试运行示例入口，随后从快照读取最终余额。部署到集群时，依赖打包方式、存储路径与提交命令以对应模块说明为准。
+
+### 4. 数据库并发与应用故障实验
+
+[correctness-lab](correctness-lab/README.md)独立运行于 Python 与临时 PostgreSQL 容器，已通过 13 项实测：库存锁等待、RC/RR、死锁、五个提交间隙的 SIGKILL 恢复、并发幂等、版本墓碑和 fencing。运行命令与原始 JSON 见模块手册。消息传输由持久化表模拟，未验证真实 Kafka Broker 故障。
