@@ -6,6 +6,10 @@
 
 ---
 
+## 本轮基础补强
+
+新增 [Linux](08-interview-questions/07-linux.md)、[网络](08-interview-questions/08-network.md)、[Docker](08-interview-questions/09-docker.md)三篇，共 18 道双角色练习，与原六方向 36 题配合复习。
+
 ## 一、项目背景与学习者画像
 
 - **从业经验**：约 **14 年** 软件研发、大数据平台架构与技术管理经验。
