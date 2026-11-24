@@ -1,17 +1,24 @@
 # 技术管理岗位面试知识库 (Tech Management Interview Knowledge Base)
 
-> **专为资深研发工程师向技术管理/技术总监/大数据架构负责人转型量身定制的知识重构与面试冲刺知识库。**
+> 面向已有约 14 年研发与技术管理经验的候选人，主攻数据平台研发负责人、大数据研发经理和高级数据架构师岗位。目标是能独立解释系统机制、用证据排障，并对方案的成本和业务结果负责。
+
+**本轮从六个技术方向开始。** 先用 Flink 解释数据怎样流动与恢复，再用 Paimon、Doris 和数据湖解释更新如何入表、报表如何查询、历史如何回放。JVM 与 Spring 用于检验平台服务的诊断能力和事务边界。每道题先口答，再按题号核对机制与决策依据。[进入六方向面试题库](08-interview-questions/README.md)
 
 ---
+
+## 本轮基础补强
+
+新增 [Linux](08-interview-questions/07-linux.md)、[网络](08-interview-questions/08-network.md)、[Docker](08-interview-questions/09-docker.md)三篇，共 18 道双角色练习，与原六方向 36 题配合复习。
+
+另补 [SQL 与建模](08-interview-questions/10-sql-modeling.md)、[数据库](08-interview-questions/11-database.md)、[分布式正确性](08-interview-questions/12-distributed-correctness.md)三篇 18 题。分类题库合计 12 篇、72 题；SQL 六题附可运行输入和结果核验脚本。[数据库并发与故障实验](code-demos/correctness-lab/README.md)另有 13 项实测结果，包含 PostgreSQL 并发与应用进程崩溃恢复。[真实 Kafka 故障实验](code-demos/kafka-fault-lab/README.md)再补 5 项实测及六道双角色延伸题，覆盖 Broker 强杀、网络隔离和恢复对账。
 
 ## 一、项目背景与学习者画像
 
 - **从业经验**：约 **14 年** 软件研发、大数据平台架构与技术管理经验。
 - **履历沉淀**：
-  - **早期研发 (2012-2016)**：Java业务系统、大数据底层平台（Hadoop、HBase、Storm、Kafka、Solr）。
-  - **架构深耕 (2016-2021)**：美的集团大数据架构师、思科中国（合肥）高级工程师（Flink、Spark、HBase、Doris、Iceberg、数据治理、实时离线平台）。
-  - **平台中枢 (2021.04-2021.11)**：Zoom 高级工程师（大规模日志数据平台、分布式链路追踪）。
-  - **部门统领与产品落地 (2022.01-2026.08)**：瑞纳智能大数据部门负责人（管理 5~10 人研发团队，从0到1主导企业级数据中台产品化研发，具备独立 Web 界面；作为太原数据中台项目总体负责人，完成全流程需求、研发、供应商协调与正式验收交付）。
+  - 美的集团大数据架构师，参与企业级数据平台与架构设计。思科中国（合肥）高级工程师，参与跨国分布式系统研发。
+  - Zoom 高级工程师，参与大规模日志与平台研发。
+  - 瑞纳智能大数据部门负责人，管理 5~10 人研发团队，从 0 到 1 主导企业级数据中台产品化研发，担任太原项目总体负责人并完成正式验收。个人经历以[已确认履历](PROFILE_FACTS.md)为准。
 - **当前核心诉求**：
   - 过去重心在管理与交付，部分底层原理、源码与细节记忆模糊（如 Flink Checkpoint 内部流转、Kafka 底层 I/O、Shuffle 机制等）。
   - 需要将技术选型、架构权衡、研发效能管理与交付实战转化为结构化、高辨识度的面试表达。
@@ -28,6 +35,7 @@ mindmap
       数据平台研发负责人
       大数据研发经理
       高级数据架构师
+      AI 数据架构师
       技术研发负责人
     兼顾拓展
       技术总监 / VP of Engineering
@@ -44,8 +52,9 @@ mindmap
 ```text
 tech-interview-knowledge-base/
 ├── README.md               # 项目说明、画像分析与全局导航入口
-├── PLAN.md                 # 42天全周期学习冲刺计划（每天90分钟规划）
+├── PLAN.md                 # 42天全周期学习冲刺计划 + AI数据架构拓展专题（每天90分钟）
 ├── PROGRESS.md             # 当前学习进度看板、状态机流转与掌握度清单
+├── PROFILE_FACTS.md        # 个人履历真实性事实清单、能力边界与教学案例隔离规范
 ├── AGENTS.md               # AI Agent (Codex/Antigravity) 协同工作准则与质量红线
 ├── 00-foundations/         # 基础概念、学习方法论与面试表达心法
 ├── 01-bigdata/             # 模块01：大数据核心技术 (Flink/Kafka/Spark/Hadoop/Doris等)
@@ -53,12 +62,14 @@ tech-interview-knowledge-base/
 ├── 03-java-engineering/    # 模块03：Java底层、JVM、并发编程、PostgreSQL/Redis与系统架构
 ├── 04-tech-management/     # 模块04：研发团队管理、团队招聘、绩效激励、效能与技术债务
 ├── 05-project-management/  # 模块05：项目管理与交付、需求控制、客户沟通、太原验收实战
-├── 06-ai-agent/            # 模块06：AI Agent、LLM原理、Skills、MCP、RAG架构与AI工程化
+├── 06-ai-agent/            # 模块06：LLM原理、Agent运行与线上部署架构、Skills、MCP、RAG与AI工程化
 ├── 07-project-review/      # 模块07：真实项目复盘 (瑞纳中台从0到1、太原交付、思科/美的/Zoom)
 ├── 08-interview-questions/ # 分类面试题库 (基础/原理/场景/系统设计/管理行为题)
 ├── 09-review/              # 错题记录、阶段复习自测与薄弱知识攻坚
+├── 10-ai-data-engineering/ # 模块10：AI数据架构与非结构化数据工程 (解析/切分/索引/混合检索/RAG评估与闭环)
+├── code-demos/             # 面试实战代码库 (Flink/Paimon/Spark/Kafka/Java 教学示例及集群提交脚本)
 ├── templates/              # 统一文档模板 (技术文档/管理文档/项目复盘模板)
-└── scripts/                # 自动化检查脚本 (完整性校验、元数据检查、断链检测)
+└── scripts/                # 自动化检查脚本 (结构质量、引用路径与事实隔离三维质检)
 ```
 
 ---
@@ -116,4 +127,9 @@ python3 scripts/verify_knowledge_base.py
 2. 查阅 [PROFILE_FACTS.md](./PROFILE_FACTS.md) 确认个人真实经历基线与待核实清单。
 3. 查看 [PLAN.md](./PLAN.md) 确认当日 90 分钟学习目标（必学/进阶/拓展）。
 4. 打开对应知识点文档（如第一天：[01-flink-runtime-architecture.md](./01-bigdata/01-flink/01-flink-runtime-architecture.md)）进入深度学习。
-5. 学习后在 [PROGRESS.md](./PROGRESS.md) 中更新学习状态，错题写入 [wrong-questions.md](./09-review/wrong-questions.md)。
+5. 针对高频面试手写代码要求，可进入 [code-demos/](./code-demos/README.md) 实操编译并演练集群提交脚本（如 [flink-yarn-demo](./code-demos/flink-yarn-demo/README.md)）。
+6. 学习后在 [PROGRESS.md](./PROGRESS.md) 中更新学习状态，错题写入 [wrong-questions.md](./09-review/wrong-questions.md)。
+
+## 双角色面试练习
+
+按“面试官提问 → 求职者初答 → 改变条件再追问 → 补充回答 → 评分”练习八轮，覆盖项目证据、正确性、SQL、排障、成本、团队、产品化和 Java 服务。[打开双角色答辩手册](07-project-review/03-interview-defense-playbook.md)

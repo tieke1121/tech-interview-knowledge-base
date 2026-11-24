@@ -1,0 +1,242 @@
+{
+  "completed_at": "2026-11-24T12:23:20.513871+00:00",
+  "environment": {
+    "image": "apache/kafka:4.1.1",
+    "image_id": "sha256:aee4e663253e674c1aa42ddc0485ff8c98ee6885997f303924085a59f8b46c7a",
+    "broker_version": "4.1.1",
+    "client": "2.12.2",
+    "librdkafka": "2.12.1",
+    "sqlite": "3.49.2",
+    "brokers": 3,
+    "replication_factor": 3,
+    "min_insync_replicas": 2,
+    "acks": "all",
+    "idempotence": true,
+    "roles": "combined broker/controller; static KRaft quorum"
+  },
+  "cleanup": "created containers, anonymous volumes, network and sink files removed",
+  "cases": [
+    {
+      "name": "leader_kill",
+      "observed": {
+        "before": {
+          "leader": 2,
+          "isr": [
+            1,
+            2,
+            3
+          ],
+          "replicas": [
+            1,
+            2,
+            3
+          ]
+        },
+        "fault": {
+          "exit_code": 137,
+          "oom_killed": false
+        },
+        "during": {
+          "leader": 3,
+          "isr": [
+            1,
+            3
+          ],
+          "replicas": [
+            1,
+            2,
+            3
+          ]
+        },
+        "restored": {
+          "leader": 3,
+          "isr": [
+            1,
+            2,
+            3
+          ],
+          "replicas": [
+            1,
+            2,
+            3
+          ]
+        },
+        "observed_failover_seconds": 8.41,
+        "audit": {
+          "records": 40,
+          "unique_ids": 40,
+          "duplicate_records": 0,
+          "missing_ids": [],
+          "unexpected_ids": [],
+          "unique_amount": 400
+        }
+      }
+    },
+    {
+      "name": "leader_network_partition",
+      "observed": {
+        "before": {
+          "leader": 3,
+          "isr": [
+            1,
+            2,
+            3
+          ],
+          "replicas": [
+            1,
+            2,
+            3
+          ]
+        },
+        "fault": {
+          "node": 3,
+          "process_running": true,
+          "experiment_network_attached": false
+        },
+        "during": {
+          "leader": 1,
+          "isr": [
+            1,
+            2
+          ],
+          "replicas": [
+            1,
+            2,
+            3
+          ]
+        },
+        "restored": {
+          "leader": 1,
+          "isr": [
+            1,
+            2,
+            3
+          ],
+          "replicas": [
+            1,
+            2,
+            3
+          ]
+        },
+        "observed_failover_seconds": 8.835,
+        "audit": {
+          "records": 40,
+          "unique_ids": 40,
+          "duplicate_records": 0,
+          "missing_ids": [],
+          "unexpected_ids": [],
+          "unique_amount": 400
+        }
+      }
+    },
+    {
+      "name": "quorum_network_partition",
+      "observed": {
+        "before": {
+          "leader": 3,
+          "isr": [
+            1,
+            2,
+            3
+          ],
+          "replicas": [
+            1,
+            2,
+            3
+          ]
+        },
+        "fault": [
+          {
+            "node": 1,
+            "process_running": true,
+            "experiment_network_attached": false
+          },
+          {
+            "node": 2,
+            "process_running": true,
+            "experiment_network_attached": false
+          }
+        ],
+        "failed_delivery": [
+          {
+            "error": "_MSG_TIMED_OUT",
+            "offset": null
+          }
+        ],
+        "restored": {
+          "leader": 3,
+          "isr": [
+            1,
+            2,
+            3
+          ],
+          "replicas": [
+            1,
+            2,
+            3
+          ]
+        },
+        "audit": {
+          "records": 41,
+          "unique_ids": 40,
+          "duplicate_records": 1,
+          "missing_ids": [],
+          "unexpected_ids": [],
+          "unique_amount": 400
+        }
+      }
+    },
+    {
+      "name": "consumer_commit_gap",
+      "observed": {
+        "barrier": {
+          "event_id": 0,
+          "offset": 0,
+          "database_committed": true
+        },
+        "signal": "SIGKILL",
+        "before": {
+          "ids": [
+            0
+          ],
+          "amount": 10
+        },
+        "committed_before": -1001,
+        "resumed": {
+          "attempts": 10,
+          "duplicates": 1,
+          "committed": 10
+        },
+        "after": {
+          "ids": [
+            0,
+            1,
+            2,
+            3,
+            4,
+            5,
+            6,
+            7,
+            8,
+            9
+          ],
+          "amount": 100
+        }
+      }
+    },
+    {
+      "name": "transaction_visibility",
+      "observed": {
+        "read_committed": {
+          "records": 5,
+          "unique_ids": 5,
+          "duplicate_records": 0,
+          "missing_ids": [],
+          "unexpected_ids": [],
+          "unique_amount": 50
+        },
+        "read_uncommitted_records": 10
+      }
+    }
+  ]
+}

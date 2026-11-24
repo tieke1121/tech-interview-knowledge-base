@@ -10,6 +10,23 @@
 
 ---
 
+## 本轮面试准备目标
+
+按下表从原计划中取用已有时段。每次仍用 90 分钟，最后 15 分钟闭卷口述两题，5 分钟核对答案并记录真实错题。学完一个方向的标准是能把结论、运行机制和一次工程决策连贯地说出来。
+
+| 顺序 | 对应学习日 | 口述练习 |
+| --- | --- | --- |
+| 1 | Day 01–03 | [Flink](08-interview-questions/01-flink.md) |
+| 2 | Day 13 | [Paimon](08-interview-questions/02-paimon.md) |
+| 3 | Day 11 | [Doris](08-interview-questions/03-doris.md) |
+| 4 | Day 12、14 | [数据湖](08-interview-questions/04-data-lake.md) |
+| 5 | Day 22 | [JVM](08-interview-questions/05-jvm.md) |
+| 6 | Day 26 的服务设计与 Day 28 的综合复盘 | [Spring 框架](08-interview-questions/06-spring.md) |
+
+## 基础补强安排
+
+按用户当前范围，依次复习 Linux、网络和 Docker，Kubernetes 暂缓。每篇沿用 90 分钟时段，先读机制，再口述两题与核对一组命令输出。随后依次练习 [SQL 与建模](08-interview-questions/10-sql-modeling.md)、[数据库](08-interview-questions/11-database.md)、[分布式正确性](08-interview-questions/12-distributed-correctness.md)。SQL 先手写再执行核对；数据库画两会话时间线；分布式逐个注入崩溃条件并说明恢复。可在 Day 05/28 时段使用[真实 Kafka 故障实验](code-demos/kafka-fault-lab/README.md)，先预测消息数、业务 ID 数和金额，再运行核对恢复结果。实际进度依据本人作答更新。
+
 ## 阶段规划概览
 
 ```mermaid
@@ -47,7 +64,7 @@ journey
 | 天数 | 模块与主题 | 必学知识（核心必修·90分钟） | 进阶知识（拔高加分） | 拓展知识（前沿视野） | 每日90分钟核心产出与验收 |
 | :--- | :--- | :--- | :--- | :--- | :--- |
 | **Day 01** | Flink 运行架构与资源管理 | JobManager/TaskManager/Slot 概念；四层图演进（StreamGraph $\to$ JobGraph $\to$ ExecutionGraph $\to$ 物理执行）；Operator Chain 链化 6 大条件；Slot 内存切分与 CPU 软共享哲学 | DefaultScheduler 与自适应调度器（Adaptive Scheduler）机制；SlotSharingGroup 资源隔离与峰谷互补实现 | Flink 2.0 存算分离架构（Disaggregated State）演进趋势；K8s Operator 云原生弹性伸缩 | 能够脱稿默画四层图与组件拓扑；流畅口述 6 个链化条件与 Exit 137 排查三步法 |
-| **Day 02** | Flink 状态管理与 Checkpoint | Managed vs Raw 状态；KeyedState 与 OperatorState；ABS（异步分段快照）算法；Changelog 机制；两阶段提交（2PC）端到端 Exactly-Once 闭环 | RocksDB 状态后端本地内存调优（BlockCache / WriteBuffer）；增量 Checkpoint 状态文件元数据管理；大状态冷热分层 | 分布式快照对齐超时降级（Aligned $\to$ Unaligned Checkpoint）；跨可用区双活状态容灾 | 讲清从 Kafka 到 Flink 到 Sink 的 2PC 提交时序；掌握 Checkpoint 超时排查决策树 |
+| **Day 02** | Flink 状态管理与 Checkpoint | Managed vs Raw 状态；KeyedState 与 OperatorState；ABS（Asynchronous Barrier Snapshotting，异步屏障快照）算法；Changelog 机制；两阶段提交（2PC）端到端 Exactly-Once 闭环 | RocksDB 状态后端本地内存调优（BlockCache / WriteBuffer）；增量 Checkpoint 状态文件元数据管理；大状态冷热分层 | 分布式快照对齐超时降级（Aligned $\to$ Unaligned Checkpoint）；跨可用区双活状态容灾 | 讲清从 Kafka 到 Flink 到 Sink 的 2PC 提交时序；掌握 Checkpoint 超时排查决策树 |
 | **Day 03** | Flink 反压机制与窗口时间语义 | Credit-based 基于信用的流控机制；Netty 网络缓冲区传输水位；Watermark 生成机制与对齐；迟到数据三级保障（AllowedLateness / SideOutput） | 反压从下游往上游定位的方法（Web UI 反压看板识别转折点）；KeyBy 数据倾斜与加盐两阶段聚合方案 | 跨分区 Watermark 闲置源倾斜治理（Idleness Detection）；流批一体自适应时间语义 | 掌握生产级反压定位 3 步排查闭环；能写出加盐两阶段聚合代码骨架并推演 |
 | **Day 04** | Kafka 底层架构与高吞吐核心 | Broker/Topic/Partition/Replica 模型；顺序写磁盘与 OS PageCache；零拷贝机制（Sendfile / mmap）；ISR 副本同步与 HW/LEO 水位对齐 | 生产级 Producer 批量聚合参数配置（`batch.size`, `linger.ms`, `acks`）；Consumer 协调机制与 Coordinator 交互 | Kafka 3.6+ KRaft 架构彻底去 ZooKeeper 机制；分层存储（Tiered Storage）架构降本方案 | 能画出零拷贝内核态/用户态对比图；说透 Kafka 支撑百万 QPS 的四大底层原因 |
 | **Day 05** | Kafka 高可用容灾与幂等/事务 | Leader Epoch 机制与脑裂数据恢复；Producer 幂等性底层（PID + Sequence Number）；Kafka 事务机制与跨 Partition 事务协调者（Transaction Coordinator） | 生产级重平衡（Rebalance）诱因排查与规避；死信队列（DLQ）与非阻塞异步重试链路设计 | 跨机房多集群 MirrorMaker 2.0 / Confluent Replicator 双活容灾方案与网络带宽权衡 | 掌握 Kafka 消息不丢、不重、有序的三大边界约束；口述 Rebalance 优化实践 |
@@ -89,7 +106,7 @@ journey
 | 天数 | 模块与主题 | 必学知识（核心必修·90分钟） | 进阶知识（拔高加分） | 拓展知识（前沿视野） | 每日90分钟核心产出与验收 |
 | :--- | :--- | :--- | :--- | :--- | :--- |
 | **Day 22** | JVM 内存模型与垃圾回收调优 | JVM 运行时数据区（堆、元空间、虚拟机栈、本地方法栈、程序计数器）；JMM 内存模型（可见性、有序性、原子性）；G1 垃圾收集器核心原理（Region、Mixed GC、STW 根因） | ZGC 染色指针（Colored Pointers）与读屏障（Read Barrier）低延迟机制；频繁 Full GC 生产三步排查（jcmd / jstat / MAT 堆转储分析） | 堆外内存泄露排查与 Jemalloc 内存分配器应用；云原生环境容器 Exit 137 防御基线 | 掌握生产级 Full GC 与堆外内存排查路径；口述三色标记与并发漏标应对策略 |
-| **Day 23** | Java 并发编程与 JUC 核心机制 | CAS 与 ABA 问题；AQS 同步器底层原理（state 状态与双向 FIFO 队列）；线程池核心参数配置、线程生命周期与四种饱和拒绝策略 | synchronized 锁升级过程（无锁 $\to$ 偏向锁 $\to$ 轻量级锁 $\to$ 重量级锁）；CompletableFuture 异步编排与线程池动态调整 | 无锁队列 Disruptor 底层环形缓冲区（RingBuffer）设计；Java 21 虚拟线程（Virtual Threads）高并发架构 | 深入讲清 AQS 的 `acquire/release` 独占与共享模式协作机制；能设计动态线程池 |
+| **Day 23** | Java 并发编程与 JUC 核心机制 | CAS 与 ABA 问题；AQS 同步器底层原理（state 状态与双向 FIFO 队列）；线程池核心参数配置、线程生命周期与四种饱和拒绝策略 | synchronized 的无竞争路径与竞争时的锁膨胀（JDK 17 默认禁用偏向锁）；CompletableFuture 异步编排与线程池动态调整 | 无锁队列 Disruptor 底层环形缓冲区（RingBuffer）设计；Java 21 虚拟线程（Virtual Threads）高并发架构 | 深入讲清 AQS 的 `acquire/release` 独占与共享模式协作机制；能设计动态线程池 |
 | **Day 24** | 数据库底层与 PostgreSQL/MySQL 事务 | ACID 特性与事务隔离级别；MVCC 多版本并发控制（UndoLog 链条与 ReadView 机制）；InnoDB B+Tree 索引底层结构与最左前缀原则；行锁、间隙锁（Gap Lock）与临键锁（Next-Key Lock） | 长事务导致回滚段膨胀治理；死锁检测与排查（Deadlock Analysis）；深分页优化与联合索引覆盖优化策略 | 分库分表（ShardingSphere）选型与分布式事务折中；NewSQL（TiDB）分布式数据库架构 | 讲透 MVCC 的 ReadView 快照生成时机；熟练排查分析生产环境 SQL 慢查询与死锁 |
 | **Day 25** | Redis 高性能架构与分布式缓存 | 单线程模型与 I/O 多路复用（epoll）；核心数据结构底层实现（SDS、ziplist、dict、skiplist）；持久化机制（RDB 快照 + AOF 增量）；缓存三剑客（穿透、击穿、雪崩）防御架构 | 缓存与数据库一致性方案（延迟双删、Binlog 异步监听重试）；分布式锁实现机制与 Redlock 争议深度剖析 | Redis 7.0 Multi-Threaded I/O 演进；高可用哨兵（Sentinel）与集群（Cluster）分片拓扑 | 讲透高并发分布式锁的安全边界（守护线程续期、Lua 原子释放）；掌握双写一致性 |
 | **Day 26** | 分布式理论与微服务架构工程 | CAP 定理与 BASE 理论；Raft 共识算法（Leader 选举、日志复制、脑裂防范）；分布式事务三大方案（2PC / TCC / Saga / Seata 框架） | 微服务限流熔断与降级（Sentinel / Resilience4j）；分布式唯一 ID 生成方案（Snowflake 时钟回拨应对） | 跨数据中心分布式共识网络延迟权衡；Service Mesh（服务网格）通信与治理架构 | 深入讲透 Raft 算法脑裂应对与日志提交条件；对比 TCC 与 Saga 适用业务场景 |
@@ -116,13 +133,31 @@ journey
 
 | 天数 | 模块与主题 | 必学知识（核心必修·90分钟） | 进阶知识（拔高加分） | 拓展知识（前沿视野） | 每日90分钟核心产出与验收 |
 | :--- | :--- | :--- | :--- | :--- | :--- |
-| **Day 36** | LLM 底层原理与 Agent 核心运行机制 | Transformer 核心机制（Self-Attention、上下文窗口）；Prompt 工程与结构化输出；Agent 核心四要素（规划 Planning、记忆 Memory、工具使用 Tools、执行 Action）；ReAct 循环交互拓扑 | Function Calling 底层协议交互与 JSON Schema 校验；Agent 反思与自我纠错机制（Reflection / Self-Consistency） | Multi-Agent 多智能体协同拓扑（Swarm / Hierarchical）；本地开源大模型部署与量化 | 讲清 Agent 与传统自动化脚本的本质区别，能画出 ReAct 状态循环拓扑 |
+| **Day 36** | LLM 底层原理、Agent 运行机制与线上生产部署架构 | Transformer 核心机制；Agent 四要素与 ReAct 循环；生产级线上 Agent 六层部署架构（状态外置 Checkpointer、AI Gateway 容灾路由、工具沙箱与幂等、护栏与全链路 Trace） | Function Calling 协议与 JSON Schema 校验；Human-in-the-Loop 异步挂起恢复；Eval-Driven CI 门禁与 Shadow/Canary 灰度发布 | Multi-Agent 多智能体协同拓扑；私有化 vLLM/SGLang 推理部署与 Prompt Caching 降本 | 讲清 Demo Agent 到线上生产系统的 6 大核心改造点，能画出生产级 Agent 部署拓扑 |
 | **Day 37** | Skills 设计与 MCP 协议标准体系 | Skills 架构模式与规范定义；Anthropic Model Context Protocol (MCP) 核心规范；MCP 客户端、服务端与传输协议（stdio / SSE）；工具沙箱与权限安全管控 | 基于 MCP 协议设计自定义数据运维与查询工具（Prompts / Resources / Tools）；动态上下文注水机制 | MCP 生态演进与跨平台 Agent 工具集成；企业级私有 MCP 工具注册中心设计 | 能讲清 MCP 协议解耦模型与工具生态的商业技术价值，口述开发步骤 |
 | **Day 38** | RAG 架构设计与向量检索实战 | RAG 核心三步（Retrieval $\to$ Augmentation $\to$ Generation）；文档切分策略（Chunking）；Embedding 语义向量模型；向量数据库（Milvus / Pgvector / Faiss）检索机制 | 混合检索架构（向量稠密检索 + BM25 稀疏关键字检索）；重排序（Reranking）模型优化；多跳推理与查询改写（Query Rewrite） | GraphRAG 知识图谱增强检索；海量企业技术文档 RAG 的幻觉抑制与评测基准 | 能设计企业级技术管理知识库 RAG 系统的架构方案与召回率调优链路 |
 | **Day 39** | AI 辅助研发工作流与工程实践 | 现代 Coding Agent 工作流（Codex / Antigravity / Claude Code）；基于 Spec / ADR 的需求驱动开发；AI 在自动化测试用例编写与 Code Review 中的应用 | 团队内部推进 AI 编程工具落地的阻力与突破策略；AI 生成代码的质量门禁与安全扫描拦截 | AI-Native 组织形态演进；软件工程从“写代码”转向“系统规范与评测设计” | 结合自身真实实践，总结出 3 点 AI 赋能大数据研发与团队效能提升的核心心得 |
 | **Day 40** | **【核心项目复盘 1】** 瑞纳数据中台与太原验收 | 瑞纳智能数据中台从 0 到 1 建设与太原项目落地全景复盘；严格对齐 `PROFILE_FACTS.md` 事实边界；STAR-L 结构化展开（背景、技术拓扑、产品化演进） | 提炼 3 个最具深度的技术攻坚点（高并发时序、状态治理、OLAP选型）；提炼 2 个代表性项目交付与专家答辩亮点 | 架构反思与前沿升华：如果今天重新架构，如何用现代流式湖仓提升架构弹性与降本 | 脱稿白板演练 30 分钟，从容应对所有关于中台产品化与项目验收的追问 |
 | **Day 41** | **【核心项目复盘 2】** 思科/美的/Zoom 技术攻坚 | 美的集团制造中台、思科网络遥测与 Zoom 在线会议日志三大案例复盘；严格遵守教学推演案例隔离规范；展现跨国协作、高并发与企业治理三维能力 | 提炼 3 个跨公司技术攻坚亮点（数据倾斜治理、秒级遥测计算、海量日志写入高可用）；跨公司工程文化对比矩阵 | 国际化视野与企业级软件研发标准对齐；技术领导力在不同组织文化下的迁移力 | 流畅阐明多段经历的技术连续性与成长脉络，完成三维经历交叉互证 |
 | **Day 42** | **【终极模拟面试】** 综合实战演练与复盘冲刺 | 90 分钟全真高管模拟面试（涵盖技术底层 30% + 架构设计 30% + 团队管理 20% + 项目交付 20%）；全面检验表达从容度与逻辑闭环 | 检查 `09-review/wrong-questions.md` 错题本，确保全部高频问题完全清零 | 最终面试状态调整与气场定型：形成沉稳、客观、具备商业大局观的技术总监沟通姿态 | 达成全面具备数据平台负责人/技术总监/大数据架构师面试通关标准的最终目标 |
+
+---
+
+### 拓展专项模块：AI 数据架构与非结构化数据工程（Day 43 - Day 51，面向 AI 数据架构师岗位）
+
+> **模块说明**：保留原有 42 天核心主线不变，本专项模块提供 9 天 × 90 分钟的深度延伸学习计划（对应 `10-ai-data-engineering/`），支持随时前置冲刺或在第 6 周后接续完成。所有实战内容均以“10,000 份企业文档 RAG 教学假设场景”展开，严守 `PROFILE_FACTS.md` 能力边界。
+
+| 天数 | 模块与主题 | 必学知识（核心必修·90分钟） | 进阶知识（拔高加分） | 拓展知识（前沿视野） | 每日90分钟核心产出与验收 |
+| :--- | :--- | :--- | :--- | :--- | :--- |
+| **Day 43** | 非结构化数据解析（`01-document-parsing.md`） | PDF 对象结构与文本/扫描路由；OCR 三阶段原理；版面分析与阅读顺序；跨页表格判定与拼接；Word/HTML 解析 | 表格 HTML vs Markdown 表达；图片与文本跨模态关联；解析质量评估指标（CER/WER、TEDS 树编辑距离） | VLM 端到端文档解析（Qwen2.5-VL / GOT-OCR）与开源工具（Docling/MinerU）vs 商业 API ROI 对比 | 画出统一文档解析与 Canonical IR 架构图；口述 PDF 跨页表格处理四步法与 OCR 错误级联影响 |
+| **Day 44** | 文档切分与元数据建模（`02-chunking-metadata.md`） | 固定/递归/结构感知切分对比；Parent-Child Chunking 原理；Chunk Size 与 Overlap 权衡；统一文档与 Chunk 元数据 Schema | Late Chunking 上下文保持原理；文档版本与部门 ACL 权限继承；章节树与图表交叉引用保留 | 语义切分成本与收益评估；映射至数据治理统一元模型与血缘体系 | 能手写统一 Chunk 元数据核心字段；讲清为什么不能靠单一 Chunk Size 同时兼顾检索与生成 |
+| **Day 45** | Embedding 与向量索引（`03-embedding-vector-index.md`） | Embedding 双塔语义表示；余弦/点积/L2 距离等价性；ANN 召回/延迟/内存权衡；HNSW 与 IVF 底层机理；内存估算公式 | MRL 可变降维；FP16/Int8/Binary 量化压缩与重打分；pgvector vs Milvus vs Qdrant vs ES 选型矩阵 | DiskANN SSD 混合索引与 ColBERT 多向量检索；HNSW 墓碑删除退化与 Compaction | 能现场口算千万级 1024 维向量的 FP32/Int8 内存占用；讲透 pgvector 与分布式向量库选型边界 |
+| **Day 46** | 混合检索与重排序（`04-hybrid-search-rerank.md`） | 倒排索引与 BM25 公式（$k_1/b/\text{IDF}$）；Dense vs Sparse 互补边界；Hybrid Search 与 RRF 融合；Cross-Encoder Rerank 机理 | 元数据 Pre-filtering vs Post-filtering 对 HNSW 连通性影响；查询改写（Rewrite/Multi-Query/HyDE） | BGE-M3 稠密+稀疏统一检索；精排服务 ONNX/TensorRT 延迟优化与超时降级 | 讲清 BM25 与向量检索各自不可替代的场景；说透为什么 RRF 比直接线性加权更鲁棒 |
+| **Day 47** | 企业级 RAG 架构设计（`05-rag-architecture.md`） | 离线异步流水线与在线检索解耦；上下文组织、Lost-in-the-Middle 排序与强引用溯源；RBAC/ABAC 检索期强制 Pre-filter 权限隔离 | 多租户四级隔离模型权衡；开源自研 vs 商业 RAG 选型七维评估矩阵；语义缓存防越权穿透 | 高可用容灾与 TTFT/P99 端到端延迟分解；与大数据平台 API 网关及权限体系融合 | 脱稿画出 10,000 份带权限企业文档 RAG 架构图；讲清为什么绝不能把权限过滤留给 LLM Prompt |
+| **Day 48** | RAG 质量评估（`06-retrieval-evaluation.md`） | 严格区分检索指标（Precision@K/Recall@K/MRR/NDCG）、生成指标（Faithfulness/Relevance/Groundedness）与业务指标；黄金测试集构建 | RAGAS/DeepEval 自动化评估；LLM-as-a-Judge 偏差（位置/长度/自我偏好）与人工校准；拒答准确率评估 | CI/CD 回归评测门禁与离线/在线双层评估体系；对标传统数据质量稽核体系 | 能手写 Recall@K、MRR 与 NDCG 核心逻辑；设计冷启动黄金集与防退化回归流程 |
+| **Day 49** | 数据质量与模型反馈闭环（`07-data-quality-feedback.md`） | 原始数据缺陷与知识冲突；6 层错误归因矩阵（数据/解析/切分/检索/排序/生成）；事实性 vs 忠实性幻觉定界 | 显式点踩+隐式行为信号采集；坏例清洗重标工作流；快慢双通道热修复机制 | 跨部门 Knowledge Owner 责任体系；将可观测 Trace 与数据质量闭环飞轮打通 | 拿到一个真实幻觉 Case 能 3 分钟完成 6 层定界；阐述“避免假闭环”的完整工程与运营方案 |
+| **Day 50** | 知识库长期演进（`08-knowledge-evolution.md`） | 统一数据源连接器抽象；内容哈希去重与版本生命周期；Chunk-Level Diff 增量更新与原子版本切换；权限即时回收与合规划除 | Embedding 模型升级的影子索引（Shadow Index）双写双读无损迁移；全量 Re-indexing 限流编排 | 未来三年架构演进路线（MVP $\to$ 规模化多租户 $\to$ 多模态与 Agentic RAG）；避免过度设计与技术债务控制 | 讲清文档变更与模型升级两类更新的工程方案；阐述“难改契约严谨、易换组件克制”的演进哲学 |
+| **Day 51** | **【AI 数据架构综合实战】** 1万文档项目与 15 题答辩（`09-capstone-project-and-interviews.md`） | 完整复盘 10,000 份企业文档教学假设项目的架构、成本与三阶段原型路线；15 道专项面试题全覆盖脱稿口述自测 | 演练 15 道题的高压典型追问与常见错误回答避坑；梳理传统大数据经验向 AI 数据架构的迁移叙事 | 结合 `PROFILE_FACTS.md` 边界演练诚实、专业、有架构穿透力的高管级面试表达 | 15 道专项面试题全部达到三层流畅口述标准，能独立完成 AI 数据架构师白板系统设计 |
 
 ---
 

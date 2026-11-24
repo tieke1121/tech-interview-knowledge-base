@@ -5,15 +5,17 @@ module: "01-bigdata"
 category: "08-doris-lakehouse"
 version_target: "Apache Doris 2.0+ / 2.1+ / 3.0"
 doc_status: "已完成"
-learning_status: "未学习"
-status: "未学习"
+learning_status: "学习中"
+status: "学习中"
 importance: "P0"
-last_reviewed: "2026-11-17"
+last_reviewed: "2026-11-24"
 tags: ["大数据", "实时OLAP", "Apache Doris", "MPP", "向量化引擎", "湖仓一体", "架构设计"]
 ---
 # Apache Doris实时OLAP架构：FE/BE极简拓扑、三大数据模型、向量化Pipeline引擎与湖仓加速实战
 
-> **学习目标定位**：面向技术总监、数据平台研发负责人、高级数据架构师岗位，系统掌握现代化实时 MPP 分析型数据库 Apache Doris 的底层架构设计哲学。深入剖析 FE/BE 极简双进程无外部依赖拓扑、三大数据模型（Duplicate/Aggregate/Unique）及 Merge-on-Write 写时合并演进、Pipeline 向量化执行引擎微架构、实时写入 2PC 事务流转与跨源湖仓统一 Catalog 加速。结合互联网大厂高频面试真题与超大规模集群实战，建立针对 -235 版本爆发治理、Runtime Filter 广播过滤、Workload Group 资源隔离与 ClickHouse 架构迁移选型的降维把控与技术管理领导力。
+> 本讲义讨论经典存算一体部署中的 FE/BE、表模型、执行引擎和导入故障。Doris 3.0 起也支持存算分离，涉及该部署时单独说明。
+
+> [!NOTE] 案例性质说明：大促场景、性能数值与参数示例均供推演，实际结果需要按数据分布、并发及版本压测。
 
 ---
 
@@ -21,7 +23,7 @@ tags: ["大数据", "实时OLAP", "Apache Doris", "MPP", "向量化引擎", "湖
 
 ### 1.1 是什么（What）
 - **技术定位**：Apache Doris 是一个基于大规模并行处理（MPP）架构的高性能、实时分析型数据库（Real-time OLAP Database）。它以极高的查询性能、极简的运维架构和高度兼容 MySQL 协议著称，能够在亚秒级响应数百亿行数据的高并发多维分析、聚合报表和高频点查。
-- **极简架构设计哲学**：与传统大数据组件动辄依赖 ZooKeeper、HDFS、YARN 等繁重生态不同，Apache Doris 整个系统仅包含两类进程：**FE（Frontend，Java 编写，负责元数据管理与查询规划）** 与 **BE（Backend，C++ 编写，负责物理存储与向量化计算）**，天然支持高可用、在线扩缩容与零外部依赖部署。
+- **部署架构**：经典模式中 FE 管理元数据并规划查询，BE 在本地存储并执行计算。存算分离模式另外使用 Meta Service 和共享存储，BE 主要承担计算和缓存。[官方架构](https://doris.apache.org/docs/4.x/features-architecture/system-architecture/)
 - **现代化架构演进（Doris 2.0+ / 2.1+ / 3.0 趋势）**：
   - **默认全链路向量化与 Pipeline 执行引擎**：全面打破传统阻塞式 Volcano 迭代模型，将并发查询调度在固定的工作线程池中，结合 SIMD 硬件指令集将 CPU 吞吐推向极致；
   - **Unique 模型 Merge-on-Write（写时合并）彻底成熟**：彻底解决传统 Merge-on-Read 导致的查询端严重读放大问题，主键点查性能提升 3~10 倍；
@@ -29,7 +31,7 @@ tags: ["大数据", "实时OLAP", "Apache Doris", "MPP", "向量化引擎", "湖
   - **Multi-Catalog 湖仓联邦一体化**：开箱即用直连 Hive、Iceberg、Paimon、Hudi 等数据湖，充当现代企业统一的数据湖仓分析查询中枢。
 
 ### 1.2 解决什么核心业务痛点（Why）
-- **传统 OLAP 引擎（如 ClickHouse）的运维与高可用灾难**：ClickHouse 强依赖 ZooKeeper 维护分布式元数据，分片机制需要手工建分布式表，分布式 Join 极易内存溢出（OOM），副本同步脆弱。Doris 通过集群内自包含的 Raft/BDB-JE 协议，实现自动分片、自动数据平衡与故障秒级自愈。
+- **副本与元数据管理**：经典部署将元数据复制与选举放在 FE 的 BDB-JE 复制组，由 FE 调度 BE 上的 Tablet 副本修复与均衡。故障恢复时间由实际检测、选举和数据恢复耗时决定。
 - **离线与实时数仓架构割裂（Lambda 架构痛点）**：传统企业中离线批处理走 Hive/Spark，实时分析走 Flink+HBase/ClickHouse，产生两套代码、两套指标口径与巨大的维护成本。Doris 支持微批实时秒级摄入与海量历史明细低成本存储，推动企业平滑演进至 Kappa 实时架构或湖仓一体架构。
 - **高并发低延迟点查与复杂多维聚合的矛盾**：传统 NoSQL（HBase）擅长点查但不擅长多表分析，传统 MPP（Presto/Impala）擅长分析但不擅长高并发高吞吐点查。Doris 兼顾了千亿级数据的并发点查与秒级复杂多表 Join。
 
@@ -41,7 +43,7 @@ tags: ["大数据", "实时OLAP", "Apache Doris", "MPP", "向量化引擎", "湖
   - **数据湖仓统一加速与跨源联邦分析**：直接通过 Doris 挂载 Hive/Iceberg 外表，无需数据搬迁即可实现秒级交互式探索。
 - **明确反模式与技术禁区（严禁使用）**：
   - ❌ **复杂长时间运行的大型离线批处理 ETL（> 2小时）**：处理数十 TB 级别、需频繁 Shuffle 溢盘的中间清洗任务，依然应交由 Spark SQL 承接；
-  - ❌ **强一致性跨行跨表 OLTP 分布式事务**：Doris 是分析型数据库，不支持高频单行随机更新与多行 ACID 事务（应走 TiDB 或 MySQL）。
+  - **高频交易系统**：Doris 支持批量原子导入以及有范围限制的显式写事务。单语句按 READ COMMITTED 读取；依赖高频读改写、行锁或事务内读回的场景应单独评估。[事务说明](https://doris.apache.org/docs/3.x/data-operate/transaction/)
 
 ---
 
@@ -107,10 +109,10 @@ graph TD
 ### 3.1 极简架构与 FE 元数据高可用流转机制
 
 - **BDB-JE 嵌入式共识选举（零外部组件依赖）**：
-  - FE 节点内部嵌入了 Oracle Berkeley DB Java Edition (BDB-JE) 高可用共识组件，实现了类似 Raft 的状态机复制协议；
+  - BDB-JE 复制元数据日志并在可选举节点间选主。
   - **角色分工明确**：
     - **Leader**：集群中有且仅有一个。唯一负责处理全局元数据写入（DDL、事务开启与提交）、生成全局唯一递增 ID、分配 Tablet 调度及负载均衡；
-    - **Follower**：通常部署 2~3 个（构成奇数 Quorum）。参与 Leader 选举投票，实时同步 Leader 的 Journal 日志；当 Leader 挂掉时，Follower 节点能在数秒内自动重新选举出新 Leader；同时分担只读查询解析；
+    - **Follower**：常见高可用部署共 3 个可选举 FE，其中一个当前担任 Leader。其余两个同步日志、参与选举，并可处理读请求。
     - **Observer**：不参与选举投票与写确认，仅作为只读从节点异步追随 Leader 的元数据。当企业面临成千上万个并发报表查询冲击 FE 时，只需水平线性扩容 Observer 即可，完全不影响集群选举稳定性。
 - **元数据持久化与 Checkpoint 机制**：
   - 元数据修改以 Journal 顺序追加日志的形式写入物理磁盘；
@@ -149,24 +151,24 @@ flowchart LR
 sequenceDiagram
     autonumber
     participant Client as 客户端 (Flink / StreamLoad)
-    participant FE as FE Leader (事务协调器)
+    participant FE as FE（入口和事务管理）
     participant BE_Coord as BE 协调者 (Coordinator)
     participant BE_Exec as BE 目标节点 (Tablet Replicas)
 
-    Note over Client,BE_Exec: 1. 事务开启与数据分发 (Prepare 阶段)
-    Client->>FE: 请求开启写入事务 (获取 TxId)
-    FE-->>Client: 分配全局唯一 TxId & 指定 Coordinator BE
-    Client->>BE_Coord: 流式推送数据流 (HTTP PUT / Stream Load)
+    Note over Client,BE_Exec: 开启 Stream Load 2PC
+    Client->>FE: PUT 写入请求，启用 two_phase_commit
+    FE-->>Client: HTTP 重定向到 Coordinator BE
+    Client->>BE_Coord: 转发请求和数据，BE 协调开启事务
     BE_Coord->>BE_Coord: 内存解析行，按照分桶 Hash 计算目标 BE
     BE_Coord->>BE_Exec: 并发分发数据包 (RPC TabletWriter)
     BE_Exec->>BE_Exec: 写入 MemTable (跳表/排序向量)，刷盘生成不可变 Rowset
     BE_Exec-->>BE_Coord: 汇报 Write Success (各副本落盘确认)
     BE_Coord-->>Client: 返回 Pre-commit 成功
 
-    Note over Client,FE: 2. 事务提交阶段 (Commit 阶段)
-    Client->>FE: 发起 Commit 事务指令 (带 TxId)
-    FE->>FE: 校验多数派副本，将 TxId 状态置为 Visible 并写 BDB-JE Journal
-    FE-->>Client: 返回最终写入成功，数据瞬间对全集群用户完全可见
+    Client->>FE: 按事务编号或标签请求第二阶段提交
+    FE->>BE_Exec: 提交后发布相应版本
+    BE_Exec-->>FE: 汇报版本发布结果
+    Note over FE,Client: COMMITTED 与 VISIBLE 分开，超时先查原事务
 ```
 
 ---
@@ -187,8 +189,8 @@ sequenceDiagram
       `client_ip` VARCHAR(32) COMMENT "客户端IP"
   ) ENGINE=OLAP
   DUPLICATE KEY(`timestamp`, `user_id`, `action_type`)
-  PARTITION BY RANGE(`timestamp`) () -- 动态时间分区
-  DISTRIBUTED BY HASH(`user_id`) BUCKETS AUTO
+  AUTO PARTITION BY RANGE (date_trunc(`timestamp`, 'day')) () -- 自动按天建立分区（Doris 2.1+）
+  DISTRIBUTED BY HASH(`user_id`) BUCKETS 16
   PROPERTIES (
       "replication_num" = "3"
   );
@@ -218,7 +220,7 @@ sequenceDiagram
 #### 3. 聚合模型（Aggregate Key Model）- 适合预聚合大屏指标与亿级 UV 精确秒级去重
 - **Bitmap 精确去重黑科技**：
   - 传统数仓计算 `COUNT(DISTINCT user_id)` 会造成严重的 Shuffle 倾斜与全量明细排序；
-  - Doris 采用 **Roaring Bitmap** 算法，将整数型用户 ID 映射入位图字段，利用 `BITMAP_UNION` 算子在存储层自动预聚合；上层只需执行 `BITMAP_UNION_COUNT(user_id)`，百亿级 UV 统计直接缩短至 10ms 级。
+  - Doris 采用 **Roaring Bitmap** 算法，将整数型用户 ID 映射入位图字段，利用 `BITMAP_UNION` 算子在存储层自动预聚合；上层只需执行 `BITMAP_UNION_COUNT(uv_bitmap)` 对预聚合位图求并后的基数，查询耗时取决于分组数、数据分布与硬件。
 - **建表范例**：
   ```sql
   CREATE TABLE dws_user_visit_agg (
@@ -282,7 +284,7 @@ default_compression_type=ZSTD
 | 监控维度 | 关键指标名称 (Prometheus / JMX) | 告警触发阈值 | 潜在业务影响与处置建议 |
 | :--- | :--- | :--- | :--- |
 | **查询耗时** | `query_latency_ms{quantile="0.99"}` | **> 1000ms** (在线报表) | 报表与大屏响应超时。检查是否缺少分区分桶剪枝、或未触发 Runtime Filter。 |
-| **版本堆积度** | `tablet_max_compaction_score` | **> 300** (危险警报) | 表明写入过快而 Compaction 无法跟上。即将抛出 **-235 错误**，需加大合并线程。 |
+| **版本积压** | Tablet 副本的 VersionCount、Compaction Score | 持续增长并逼近本集群上限 | 核对写入速率、合并速度及磁盘压力。Score 与版本数是不同指标。 |
 | **BE 内存利用率** | `doris_be_memory_allocated_bytes / mem_limit` | **> 90%** | 面临 OOM 风险，可能触发 BE 保护性杀死高消耗查询。需排查大表未经切分的无界 Join。 |
 | **FE 锁竞争** | `fe_meta_lock_wait_time_ms` | **> 500ms** | 大批量 DDL 或高频微批事务阻塞了 FE 全局写锁，导致所有请求排队超时。 |
 
@@ -294,45 +296,24 @@ default_compression_type=ZSTD
 
 ```mermaid
 flowchart TD
-    Alert["生产监控告警: Flink 实时写入 Doris 抛出大量错误<br/>客户端抛出: -235 [TOO_MANY_SEGMENTS] 或 [TOO_MANY_VERSIONS]"] --> Step1["第 1 步: 调取目标 BE 的 Compaction 监控指标"]
-    Step1 --> CheckScore{"tablet_max_compaction_score 是否突破 1000?"}
-    CheckScore -->|是: 发生严重版本积压| Step2["第 2 步: 分析写入端调用特征与频率"]
-    Step2 --> CheckFreq{"写入是否属于每秒成百上千次的小微批写入?"}
-    CheckFreq -->|是: 写入频率过高| RootMicro["根因 1: 客户端微批流速过快, 产生海量碎片 Rowset<br/>SOP: 调整客户端批处理缓冲 (单批次 > 10MB 或间隔 > 3秒)"]
-    CheckFreq -->|否: 批量正常| Step3["第 3 步: 排查 BE 节点 Compaction 资源状况"]
-    Step3 --> CheckCompaction{"BE 节点 CPU/磁盘 I/O 是否已饱和?"}
-    CheckCompaction -->|否: 合并线程不足| RootThread["根因 2: Compaction 线程配置过保守<br/>SOP: 调大 max_cumu_compaction_threads, 开启垂直合并"]
-    CheckCompaction -->|是: 磁盘 I/O 100%| RootIO["根因 3: 机械硬盘或底层 I/O 吞吐见顶<br/>SOP: 迁移至 NVMe SSD, 开启分区分桶冷热分离"]
+    Alert["导入写入失败"] --> Code{"核对错误码与 Tablet ID"}
+    Code -->|-235 版本积压| Versions["检查各副本 VersionCount 与增长速度"]
+    Versions --> Freq{"小批提交过频？"}
+    Freq -->|是| Batch["合并提交并验证可见延迟"]
+    Freq -->|否| Disk["查看对应 BE 合并日志、磁盘空间与 I/O"]
+    Code -->|-238 单批分段过多| Seg["检查单批大小、热点 Tablet 和 segment 数"]
+    Seg --> Smaller["减小该批数据或调整数据分布，再验证导入"]
 ```
 
 ---
 
 ### 5.2 核心高频故障深度复盘
 
-#### 故障一：实时流写入爆发 `-235 [TOO_MANY_SEGMENTS]` 异常，全链路实时流断流
-- **业务场景**：大促期间，Flink CDC 抽取 MySQL 订单数据通过 Doris Stream Load 实时写入。流量峰值时，Flink 作业大面积报错挂掉，日志显示：`errorCode=-235, detailMessage=too many segments in rowset` 或 `too many versions in tablet`。
-- **深层根因推导**：
-  1. 开发者在 Flink 侧将写入刷新时间间隔设置得过短（如 `sink.buffer-flush.interval-ms=200ms`），每秒触发 5 次事务提交；
-  2. 每一次 Stream Load 提交，Doris 底层都会生成一个新的 **Rowset（版本号自增 1）**；
-  3. 当某一个 Tablet 内部尚未合并的 Rowset 版本数量超过阈值（默认 `max_tablet_version_num=1000`）时，**Doris 为防止读放大无限恶化触发自我保护机制，主动拒绝新的写请求并抛出 -235 错误**；
-  4. 此时若客户端未做退避重试，直接引发 Flink 作业级联崩溃崩溃。
-- **架构级解决方案（止血与根治）**：
-  - **客户端源头治理（最核心治本之道）**：
-    - 严禁高频小微批！修改 Flink Sink 配置，实施“按体积 + 按时间”双重缓冲：
-      ```properties
-      sink.buffer-flush.max-rows=100000;
-      sink.buffer-flush.max-bytes=33554432; # 32MB
-      sink.buffer-flush.interval-ms=3000;   # 3~5秒
-      ```
-  - **服务端应急调优（加速消峰）**：
-    - 动态调大 BE 合并线程与并发度：
-      ```bash
-      curl -X POST http://be_ip:8040/api/update_config?max_cumu_compaction_threads=8
-      ```
-    - 临时调高版本上限给客户端缓冲自愈空间：
-      ```bash
-      curl -X POST http://be_ip:8040/api/update_config?max_tablet_version_num=2000
-      ```
+#### 故障一：写入失败时先区分 -235 和 -238
+
+- **-235** 表示某 Tablet 版本数超过上限。用报错中的 Tablet ID 检查各副本 VersionCount；增长过快时降低小批提交频率，如降频后仍不回落，查对应 BE 的合并日志、磁盘与资源竞争。
+- **-238** 表示单个 Rowset 的 Segment 数过多。先检查批次是否过大、某个 Tablet 是否过热，再拆小批次。两个错误的调批方向可能相反。
+- **验收**：同时观察积压是否回落、写入成功率、可见延迟和查询尾延迟。版本阈值按实际 BE 配置读取。[Doris 官方 FAQ](https://doris.apache.org/docs/dev/faq/data-faq/)
 
 #### 故障二：大促期间上千个报表并发查询，FE 报 `Failed to get connection, timeout` 集群假死
 - **现象**：业务高峰期，前端所有用户在 BI 报表平台发起查询均报超时，Beeline 客户端无法连接 FE，日志中频繁出现 `Fe Master is busy` 或 `Lock wait timeout exceeded`。
@@ -357,12 +338,11 @@ flowchart TD
 
 | 评估维度 | Apache Doris | ClickHouse | StarRocks | Presto / Trino |
 | :--- | :--- | :--- | :--- | :--- |
-| **系统架构拓扑** | **极简双进程 (FE/BE)**，无任何外部依赖 | 依赖 ZooKeeper/Keeper，组件与配置繁琐 | 极简双进程 (FE/BE)，源自 Doris 分支 | 协调者/工作者 (Coordinator/Worker) |
-| **分布式高可用能力** | **开箱即用高可用**，副本自动平衡自愈 | 较脆弱，副本同步异常需复杂运维排查 | 开箱即用高可用 | 仅负责计算，自身无存储 |
-| **多表关联（Join）性能** | **极强**（现代化 CBO + RuntimeFilter + Shuffle） | 极弱（大表 Join 极易 OOM，需手写优化） | **极强**（CBO 优化成熟） | 强（全内存计算） |
-| **高并发主键写更新** | **极强（Unique Key MoW 写时合并）** | 较弱（基于 Mutation 重写磁盘，成本巨大） | 极强（Primary Key 模型） | 不支持（纯只读查询引擎） |
-| **SQL 兼容度** | **100% 兼容 MySQL 协议与语法** | 自定义 SQL 方言，与标准 SQL 差异大 | 兼容 MySQL 协议 | ANSI SQL 标准 |
-| **湖仓统一 Catalog** | **极强**（支持 Hive/Iceberg/Paimon 零拷贝直读）| 较弱（外表集成复杂、生态兼容度低） | 极强（湖仓外表深度优化） | 极强（原生跨源联邦引擎） |
+| **系统架构拓扑** | 经典部署 FE/BE，存算分离含 Meta Service 与共享存储 | 复制表使用 Keeper 或兼容的协调服务 | 依据存算部署模式选角色 | Coordinator/Worker |
+| **多表关联** | 比较 Broadcast、Shuffle、Colocation 的网络开销 | 按内存预算、连接键和输入排序选择 Join 算法 | 对代表查询检查计划 | 依赖统计信息、连接器与资源预算 |
+| **主键更新** | Unique Key，评估 MoW 的写入成本 | 可用 ReplacingMergeTree 承接版本行，查询需处理后台合并前的可见性 | 可用 Primary Key 模型 | 写入能力取决于连接器 |
+| **协议兼容** | 提供 MySQL 协议接口，测试应用用到的具体语法 | ClickHouse SQL | 提供 MySQL 协议接口 | Trino/Presto SQL |
+| **湖表访问** | 按 Catalog 与表格式测试读写兼容性 | 按部署版本测试外部表引擎 | 按 Catalog 测试 | 按 Connector 测试 |
 
 ### 6.2 架构演进与选型决策树
 
@@ -370,7 +350,7 @@ flowchart TD
 flowchart TD
     Req["企业级分析型 OLAP 选型需求"] --> Q1{"是否需要高频实时行级更新 (CDC) 或高并发点查?"}
     Q1 -->|是: 存在实时更新与点查需求| Q2{"团队运维人力预算与技术栈分布如何?"}
-    Q2 -->|追求极简运维、标准 MySQL 协议、多表大关联强需求| SelDoris["【首选 Apache Doris】<br/>(FE/BE 架构零外部依赖, Unique MoW 写时合并, CBO Join 强大)"]
+    Q2 -->|追求极简运维、标准 MySQL 协议、多表大关联强需求| SelDoris["【首选 Apache Doris】<br/>(经典 FE/BE 模式, Unique MoW 写时合并, CBO Join 强大)"]
     Q2 -->|愿意投入专业底层运维团队、纯单表极速日志分析| SelCH["选择 ClickHouse<br/>(极致单表聚合, 但多表 Join 与更新代价高)"]
     Q1 -->|否: 纯跨多异构数据源联合即席分析| Q3{"是否需要本地存储数据并做毫秒级大屏服务?"}
     Q3 -->|是| SelDoris
@@ -419,8 +399,7 @@ flowchart TD
    - 批量摄入必须走 **Stream Load**，且单批次数据量建议维持在 **10MB ~ 100MB** 或提交间隔不少于 2 秒。
 2. **严禁无分区过滤的超大跨度全表扫描**：
    - 数据网关门禁强制校验：针对天级/月级分区的大宽表，查询条件中必须强制包含 `WHERE dt >= ...` 分区范围，严禁触发全集群全分区物理扫描。
-3. **主键唯一模型表建表必须显式开启 Merge-on-Write**：
-   - 除非数据只写不读，否则新建的 Unique Key 模型表必须显式设置 `"enable_unique_key_merge_on_write" = "true"`，杜绝使用老旧的读时合并（MoR）模式。
+3. **建表时核对 Unique Key 合并模式**。Doris 2.1 起新建 Unique Key 表默认使用 MoW。升级集群后仍需核对已有表的实际属性。[版本说明](https://doris.apache.org/blog/release-note-2.1.0/)
 4. **大促前夕严禁执行集群大范围重平衡与扩缩容**：
    - 扩容与缩容引发的 Tablet 跨节点网络迁移会占用大量网络 I/O，必须在大促封网日前 3 天完成。
 
@@ -433,7 +412,7 @@ flowchart TD
 ## 8. 互联网大厂高频面试真题库
 
 > [!IMPORTANT]
-> 本板块精选一线互联网大厂（阿里、字节、美团、腾讯、快手）真实高频考察的 7 道实时 OLAP 核心真题。**在第 9 板块中已对全部题目进行逐题完整三层金字塔深度解答，严禁留白。**
+> 本节为 7 道架构与排障推演题。逐题带有公开面经出处的版本另见 [Doris 面试六问](../../08-interview-questions/03-doris.md)。
 
 ### 8.1 基础架构与元数据高可用题（大厂初筛）
 1. **Q1**：请简述 Apache Doris 的整体架构与组件角色（FE 与 BE），为什么它能够摆脱对 ZooKeeper 和 HDFS 的外部重度依赖？FE 的元数据高可用是如何实现的？
@@ -443,12 +422,12 @@ flowchart TD
 3. **Q3**：什么是 Doris 的 Pipeline 向量化执行引擎？它与传统的 Volcano 迭代执行模型相比，如何从操作系统线程调度与 CPU 硬件级别消除开销并大幅提升吞吐？
 4. **Q4**：为什么在 Doris 中执行跨节点大表关联（Join）时，Runtime Filter（运行时过滤器）能够带来数倍乃至数十倍的性能飞跃？它的底层工作机制与下推流转时序是怎样的？
 
-### 5.3 复杂生产场景与故障排障题（大厂架构与排障面）
-5. **Q5**：实时数据接入时频繁抛出 `-235 [TOO_MANY_SEGMENTS]` 或 `[TOO_MANY_VERSIONS]` 异常，请结合底层 Compaction 机制分析其深层根因，并给出从客户端到服务端全链路的系统性调优方案。
+### 8.3 复杂生产场景与故障排障题（大厂架构与排障面）
+5. **Q5**：实时数据接入时频繁抛出 `-235` 异常，请结合底层 Compaction 机制分析其深层根因，并给出从客户端到服务端全链路的系统性调优方案。
 6. **Q6**：在海量数据大屏与实时多维分析中，如何利用 Doris 的 Roaring Bitmap 实现百亿级 UV 的秒级精确去重？与传统的 `COUNT(DISTINCT)` 相比，其底层数据结构与性能优势何在？
 
 ### 8.4 架构设计与系统规划题（技术总监/总架构师终面）
-7. **Q7**：作为大数据研发负责人/架构师，在实时 OLAP 架构选型中，请深度对比 Apache Doris 与 ClickHouse 在分布式架构、多表关联、运维复杂度与湖仓一体维度的优劣势，陈述为什么当前业界越来越多团队选择将 OLAP 统一收敛至 Doris？
+7. **Q7**：作为大数据研发负责人/架构师，在实时 OLAP 架构选型中，请深度对比 Apache Doris 与 ClickHouse 在分布式架构、多表关联、运维复杂度与湖仓一体维度的优劣势，说明在什么条件下值得将 OLAP 收敛至 Doris？
 
 ---
 
@@ -459,17 +438,13 @@ flowchart TD
 ### 题目1（大厂初筛·基础架构）：请简述 Apache Doris 的整体架构与组件角色（FE 与 BE），为什么它能够摆脱对 ZooKeeper 和 HDFS 的外部重度依赖？FE 的元数据高可用是如何实现的？
 
 #### 简洁回答（1分钟电梯破题）：
-> “Apache Doris 采用**自包含（Self-contained）的极简两层无状态/有状态分离架构**，全集群仅由两类进程组成：
-> - **FE（Frontend，Java 编写）**：负责集群元数据管理、MySQL 协议连接交互、SQL 解析、CBO 代价优化与分布式执行计划分发；
-> - **BE（Backend，C++ 编写）**：负责实际的物理列式存储、数据副本强一致同步、Compaction 合并与多线程向量化计算；
-> **摆脱外部依赖的根因**：FE 内部集成了轻量级嵌入式 **BDB-JE 状态机共识算法**（类似 Raft），自身即可完成 Leader 选举与元数据日志同步，因此完全无需外部 ZooKeeper；BE 自带分布式多副本存储管理，直接纳管本地磁盘，无需依赖 HDFS；
-> **FE 高可用**：通过划分 **Leader（唯一写+协调）**、**Follower（参与选举投票并分担读）** 与 **Observer（仅异步同步元数据，线性支撑海量高并发读）** 实现毫秒级故障自动转移。”
+经典存算一体部署分为 FE 与 BE。FE 处理 SQL 和元数据，BE 保存列式数据并执行分布式算子。FE 的 BDB-JE 复制组选出 Leader，Observer 不参与选举。存算分离模式另有 Meta Service 和共享存储。[官方架构](https://doris.apache.org/docs/4.x/features-architecture/system-architecture/)
 
 #### 深入回答（技术细节展开、底层机制与推导）：
 > “FE 与 BE 的深度交互机制与元数据高可用流转拆解：
 > 1. **FE 内部角色状态流转**：
 >    - **Leader FE**：唯一的写入入口。所有涉及元数据修改的 DDL、表结构创建、写入事务（TxId 生成与 Commit），必须路由至 Leader 执行；
->    - **Follower FE**：集群通常部署 3 个 Follower（奇数 Quorum）。它们与 Leader 一起组成 BDB-JE 复制组。当 Leader 突发崩溃宕机时，剩余的 Follower 在数秒内通过心跳感知并重新发起 Paxos/Raft 选举，无缝推举出新 Leader；
+>    - **Follower FE**：常见部署共 3 个可选举 FE，包含当前 Leader。Leader 故障后，剩余多数可选举新的 Leader。
 >    - **Observer FE**：针对双十一大促等超高并发查询场景，可随时横向添加 5~10 台 Observer。Observer 不参与任何投票和 Quorum 写确认，仅通过内存订阅 Leader 的 Journal 日志流。这样即使数万个前端报表高频拉取元数据，也不会拖垮集群核心选主逻辑。
 > 2. **元数据 Checkpoint 与 Journal 体系**：
 >    - FE 的元数据操作先写入 Journal 日志（顺序写磁盘），并实时应用到内存元数据树中；
@@ -479,10 +454,7 @@ flowchart TD
 >    - 若某台 BE 宕机超过阈值（`tablet_checker_interval_s`），FE 会自动在其他存活的 BE 节点上调度创建缺失的副本并从存活副本中拉取数据自愈，全过程对业务完全透明。”
 
 #### 架构师/技术管理视角（降维升华、权衡取舍、SLA与成本）：
-> “在技术管理与基础设施建设高度，**系统的‘简洁性’直接决定了生产的‘稳定性’与‘人力维护成本’**：
-> 过去维护一套由 Hadoop/HDFS + ZooKeeper + HBase + Presto 拼凑的实时查询体系，链路长达数层，任何一个组件的 GC 停顿或配置失误都会引发连锁故障，团队不得不配备数名专门的底层运维人员；
-> Doris 的极简架构将**全链路故障面（Blast Radius）收敛至最小**。在实际工程落地中，Doris 的部署和升级只需要替换二进制文件，不依赖任何外部组件，集群冷启动可在 1 分钟内完成。
-> 这种‘低运维负债、自包含高可用’的设计，不仅直接降低了 50% 的集群维护工时，更从根源上杜绝了因 ZooKeeper 脑裂或 HDFS 慢节点引发的 P0 级线上生产事故。”
+按角色演练单个 FE 和 BE 故障，分别记录写入停顿、查询重试、补副本流量和恢复时间。分离部署还应测试共享存储访问故障和缓存冷启动。
 
 ---
 
@@ -511,7 +483,7 @@ flowchart TD
 >      - 写入极快，直接追加写入新的 Rowset；
 >      - 但当一个 Tablet 积累了 50 个 Rowset 时，任何一个查询都必须同时打开 50 个文件的 Reader，构建一个 50 路的归并优先堆，比较 Key 的大小并抛弃旧版本；
 >      - **后果**：CPU 耗费在繁重的对象比较上，无法进行纯粹的 SIMD 向量化计算，且极易导致高并发查询延迟飙升。
->    - **现代 Merge-on-Write（MoW，写时合并，Doris 2.0+ 默认基准）**：
+>    - **现代 Merge-on-Write（MoW，写时合并，自 Doris 2.1 起对新建 Unique Key 表默认启用）**：
 >      - 当新 Rowset 准备落盘时，查询主键索引（Primary Key Index，基于内存 RoaringBitmap 或高速缓存），迅速定位出这些 Key 在老 Rowset 中的具体物理行号（RowId）；
 >      - 在对应老 Rowset 的 **Delete Bitmap** 中将这些 RowId 标记为已删除（二进制位置 1）；
 >      - **查询优势**：读取引擎只需向底层扫描器传入该 Delete Bitmap，Reader 在加载数据时依据位图直接过滤跳过被删除的行，**计算链路完全退化为与 Duplicate 模型完全一致的纯单路向量化高速扫描，P99 延迟暴降 80%**。”
@@ -521,7 +493,7 @@ flowchart TD
 > 过去的传统思想往往认为‘写入应该越快越好’，因而容忍了 MoR 模型的读性能损耗。
 > 但在现代企业级在线分析场景中：**‘读延迟的 SLA 往往是严格且面向业务端体验的（要求 < 500ms），而实时写入在后台具备天然的秒级容忍缓冲垫’**。
 > 写时合并（MoW）通过在写入阶段多消耗微量 CPU 计算 Delete Bitmap，换取了线上业务读性能的数十倍跃升。
-> 作为数据团队负责人，在指导建表时必须树立硬性标准：**凡是用于在线大屏、业务 API 点查的 Unique 表，强制开启 `enable_unique_key_merge_on_write=true`**。这一项工程规范的落地，曾直接帮助我们在大促期间将在线查询机器资源节省了 60%。”
+比较 MoW 写入和查询两端的资源曲线，再决定在线状态表的资源预算。示例不代表已取得的个人业绩。
 
 ---
 
@@ -593,47 +565,19 @@ flowchart TD
 
 ---
 
-### 题目5（生产排障·大厂高频）：实时数据接入时频繁抛出 `-235 [TOO_MANY_SEGMENTS]` 或 `[TOO_MANY_VERSIONS]` 异常，请结合底层 Compaction 机制分析其深层根因，并给出从客户端到服务端全链路的系统性调优方案。
+### 题目5（生产排障推演）：实时数据接入时频繁抛出 `-235` 异常，请结合底层 Compaction 机制分析其深层根因，并给出从客户端到服务端全链路的系统性调优方案。
 
-#### 简洁回答（1分钟电梯破题）：
-> “-235 错误的本质是：**数据写入的频率与速度，远超当前 BE 节点后台 Compaction（小文件版本合并）的处理能力，导致未合并的 Rowset 版本堆积突破了系统保护阈值（默认 1000）**。
-> - **底层根因**：客户端采用了高频‘小微批’写入（如 Flink 每 200ms 刷写一次），每次提交产生一个独立 Rowset 版本；合并线程跟不上导致堆积，Doris 主动阻断写入以防读放大雪崩；
-> - **全链路调优方案**：
->   1. **客户端治本**：强推微批合并，设置 Flink Sink 缓冲阈值（每批 > 10MB 或间隔 3~5 秒）；
->   2. **服务端提速**：调大 `max_cumu_compaction_threads=8`，开启**垂直合并（Vertical Compaction）**；
->   3. **物理介质优化**：将机械硬盘升级为 NVMe SSD，彻底打破 I/O 写入瓶颈。”
+#### 简洁回答
 
-#### 深入回答（技术细节展开、底层机制与推导）：
-> “深入剖析 Compaction 机制与全链路参数治理：
-> 1. **Doris 的两级 Compaction 状态机模型**：
->    - **Cumulative Compaction (CC)**：专门负责将新生成的大量小体积增量 Rowset（小版本）快速合并为较大的 Rowset，是解决版本堆积的最前线阵地；
->    - **Base Compaction (BC)**：负责将大 Rowset 与历史基线版本进行全量深度重写合并，开销巨大。
->    - 当某 Tablet 的 `version_count` 持续增加并触碰到 `max_tablet_version_num`（默认 1000）时，系统立刻抛出 `-235` 异常并拒绝新的写入。
-> 2. **服务端提速三板斧（BE 参数调优）**：
->    - **增加并发度**：
->      在 `be.conf` 中调大 Cumulative Compaction 线程数：
->      ```properties
->      max_cumu_compaction_threads = 8  # 默认由4调至8或16
->      cumulative_compaction_min_deltas = 5 # 达到5个小版本立即触发合并
->      ```
->    - **开启垂直合并（Vertical Compaction - 杀手级特性）**：
->      对于拥有上百列的大宽表，传统的 Compaction 是一次性将整行加载入内存合并，极易将 BE 内存撑爆；
->      开启 `enable_vertical_compaction=true` 后，Doris 将大宽表按列切分逐列合并，内存占用下降 70%，合并速度提升 2 倍以上！
->    - **开启分批分段限速保护**：
->      防止 Compaction 争抢过多磁盘 I/O 影响在线点查，配置 `compaction_promotion_size_mbytes=1024`。
-> 3. **客户端写入端约束（SOP 治理）**：
->    - 在 Flink CDC / Routine Load / DataX 接入端，强制约束写入批量大小：
->      - 单批次数据行数：$\ge 50,000$ 行；
->      - 单批次数据体积：$10\text{MB} \sim 50\text{MB}$；
->      - 提交频率：$3\text{s} \sim 10\text{s}$ 一次，严禁毫秒级提交。”
+-235 要查 Tablet 版本数。写入持续产生新的 Rowset，合并速度不足时，版本数可超过上限。-238 的限制在单个 Rowset 的 Segment 数，两种错误需要不同处置。
 
-#### 架构师/技术管理视角（降维升华、权衡取舍、SLA与成本）：
-> “在技术管理与大促保障体系中，**‘出现 -235 错误绝不是简单的服务端参数问题，而是典型的跨团队协同失序’**：
-> 很多业务开发团队为了追求自己业务所谓的‘超低延迟’，在 Flink 里肆意将 flush 间隔设为 100 毫秒，直接将底层存储打垮。
-> 我的管理方法论是**‘以平台化中台门禁和配置基线建立写入契约’**：
-> 1. **写入网关统一治理**：业务系统严禁直连 BE 执行原生写入，统一通过数据中台封装的 Stream Load SDK 或统一 Flink Connector 接入。在 SDK 内部强制固化最小 3 秒批处理缓冲逻辑，代码层面剥夺个别开发人员随意修改刷写频率的权限；
-> 2. **建立 Tablet 积压实时监控预警**：在 Grafana 看板设置 `tablet_max_compaction_score > 300` 预警阈值。在未突破 1000 发生故障前，系统自动触发限流削峰，誓死捍卫核心集群的高可用 SLA。”
+#### 深入回答
 
+先按 Tablet ID 找到各副本及 VersionCount。小批太密时合并提交；降低导入速率后版本仍不下降，检查对应 BE 上的 compaction 日志、磁盘和 CPU。若错误是 -238，检查单批写向该 Tablet 的字节和分布倾斜，降低单批体积。阈值取运行实例的配置。[Doris 官方 FAQ](https://doris.apache.org/docs/dev/faq/data-faq/)
+
+#### 架构师/技术管理视角
+
+为核心订单与可延后回灌分别设置吞吐、可见延迟预算。先限制低优先级流量，恢复后分批追赶，记录恢复时间与负载水平，供下次容量评审使用。
 ---
 
 ### 题目6（架构设计·高频核心）：在海量数据大屏与实时多维分析中，如何利用 Doris 的 Roaring Bitmap 实现百亿级 UV 的秒级精确去重？与传统的 `COUNT(DISTINCT)` 相比，其底层数据结构与性能优势何在？
@@ -642,7 +586,7 @@ flowchart TD
 > “传统的 `COUNT(DISTINCT user_id)` 是将全量用户 ID 原始字符串/整型明细通过网络进行全局 Shuffle 并在内存中建立哈希表去重，**计算开销巨大、极易引发单点数据倾斜与内存溢出（OOM），百亿体量下耗时往往长达数分钟**；
 > **Doris 基于 Roaring Bitmap 实现的秒级精确去重方案**：
 > 1. **数据高度压缩与预计算**：将整型 `user_id` 作为位图下标映射入 **Roaring Bitmap** 紧凑存储结构中，利用聚合模型 `BITMAP_UNION` 在数据写入时在后台自动执行**增量位运算合并**；
-> 2. **查询性能飞跃**：在线查询仅需对各分片的 Bitmap 执行极快的**位运算（Bitwise OR）** 并统计非零位个数（`BITMAP_UNION_COUNT`），**完全免除全网明细 Shuffle 与排序，将百亿级 UV 统计耗时从数分钟直接压缩至毫秒级（10~50ms）**。”
+> 2. **查询性能飞跃**：在线查询仅需对各分片的 Bitmap 执行极快的**位运算（Bitwise OR）** 并统计非零位个数（`BITMAP_UNION_COUNT`），减少传输的明细行数；需按数据分布和分组数验证耗时。”
 
 #### 深入回答（技术细节展开、底层机制与推导）：
 > “Roaring Bitmap 的底层数据结构与全链路落地方案剖析：
@@ -658,7 +602,7 @@ flowchart TD
 > 2. **业务落地架构方案（非整数型字典映射机制）**：
 >    - 若业务 `user_id` 是 UUID 或字符串格式，无法直接映射为位图下标；
 >    - **引入全局字典表（Global Dictionary Table）**：
->      通过 Doris 自带的 `dict_table` 或外部工具，利用 `MurmurHash` 或递增 ID 为字符串统一分配唯一的全局连续整型 ID（`integer_user_id`），再写入 Bitmap 表；
+>      用持久的全局字典为每个不同字符串分配不重复且稳定的整数，再写入 Bitmap。直接取哈希存在碰撞，无法保证精确 UV。[精确去重](https://doris.apache.org/docs/4.x/query-acceleration/distinct-counts/bitmap-precise-deduplication/)
 > 3. **透明物化视图加速（Rollup Acceleration）**：
 >    - 在明细表上直接创建聚合物化视图：
 >      ```sql
@@ -668,61 +612,81 @@ flowchart TD
 >      GROUP BY dt, channel;
 >      ```
 >    - 用户直接编写常规 SQL：`SELECT dt, COUNT(DISTINCT user_id) FROM ods_action_log GROUP BY dt;`
->    - Doris 的 CBO 优化器会自动命中物化视图，将 `COUNT(DISTINCT)` 智能透明改写为 `BITMAP_UNION_COUNT`，业务开发无感知享受亚毫秒级响应。”
+>    - 若这条查询符合物化视图的改写条件，可以复用预聚合结果。用 EXPLAIN 核对是否命中。”
 
 #### 架构师/技术管理视角（降维升华、权衡取舍、SLA与成本）：
-> “在技术架构演进与大屏保障中，**‘用位运算替代传统代数运算优化性能’是高级架构师的标志性技能**：
-> 很多初级架构师在遇到大促 UV 统计慢的问题时，第一反应是给 Spark/Doris 集群疯狂加 CPU 和内存，结果成本上去了延迟依然无法收敛到 1 秒内。
-> Roaring Bitmap 方案将计算复杂度由 $O(N \log N)$ 的分布式排序降维至 $O(1)$ 的 CPU 位级指令；
-> 在我们主导的电商大促与物联网大屏实践中：
-> 采用这一套基于 Doris 的 Bitmap 预聚合架构后，面对每日新增 5 亿活跃事件，大屏‘当日实时累计 UV’查询延迟稳定在 **30 毫秒以内**，同时不仅没加机器，反而缩减了原本用于中间层 Spark 离线去重计算的 12 台服务器，真正实现了‘性能断层式提升、成本阶梯式下降’。”
+位图并集成本随容器数量、密度和输入分片数变化。字典也需要跨批次稳定分配 ID。
+
+在教学看板中，以同一窗口的原始 DISTINCT 结果做对照，比较 Bitmap 结果、耗时与字典维护开销，再决定是否物化。
 
 ---
 
-### 题目7（架构总监终面·企业级方案）：作为大数据研发负责人/架构师，在实时 OLAP 架构选型中，请深度对比 Apache Doris 与 ClickHouse 在分布式架构、多表关联、运维复杂度与湖仓一体维度的优劣势，陈述为什么当前业界越来越多团队选择将 OLAP 统一收敛至 Doris？
+### 题目7（架构总监终面·企业级方案）：作为大数据研发负责人/架构师，在实时 OLAP 架构选型中，请深度对比 Apache Doris 与 ClickHouse 在分布式架构、多表关联、运维复杂度与湖仓一体维度的优劣势，说明在什么条件下值得将 OLAP 收敛至 Doris？
 
-#### 简洁回答（1分钟电梯破题）：
-> “ClickHouse 是‘极致单表性能的性能怪兽’，但其在分布式协同、复杂关联与运维架构上存在巨大缺陷；
-> **Doris 则是兼具极致性能与企业级完备特性的‘现代化全能型实时数仓’**。
-> 业界向 Doris 收敛的核心技术动因主要包含四大核心维度：
-> 1. **架构与运维复杂度（0 vs 100）**：Doris 采用 FE/BE 极简双进程，零外部依赖、开箱即用自动高可用；ClickHouse 强依赖 ZooKeeper，分片与副本运维极其脆弱繁琐；
-> 2. **多表关联能力（CBO vs 易OOM）**：Doris 具备成熟强大的 CBO 优化器与 Runtime Filter，擅长复杂多表 Join；ClickHouse 默认大表 Join 极易内存溢出，要求业务强写大宽表；
-> 3. **主键更新与 CDC（写时合并 vs 重写突刺）**：Doris 的 Unique MoW 支持高频实时流更新且读无损；ClickHouse 的 Mutation 是重型异步文件重写，无法支撑实时高频 CDC；
-> 4. **湖仓一体（Multi-Catalog 统一）**：Doris 能开箱即用无缝纳管 Hive/Iceberg 等外部数据湖，充当统一分析中枢。”
+#### 简洁回答
 
-#### 深入回答（技术方案、拓扑推导与权衡）：
-> “四大维度的全景深度对比与架构决策推导：
-> 1. **架构复杂度与高可用对比（Architecture & HA）**：
->    - **ClickHouse**：没有自包含的集群元数据管理，强依赖 ZooKeeper（或自研 ClickHouse Keeper）保存分片与副本状态。集群扩缩容时，必须手动修改 XML 配置文件并手工执行数据重平衡；本地表与分布式表（Distributed Table）的分离让业务应用接入极其复杂；
->    - **Apache Doris**：仅包含 FE 和 BE 两种角色，内置共识算法。扩缩容仅需一行 `ALTER SYSTEM ADD BACKEND "ip:port"`，系统自动在后台执行 Tablet 迁移与副本重平衡，全程对业务读写零影响。
-> 2. **复杂多表关联（Join）能力对比**：
->    - **ClickHouse**：采用传统的单机内存 Hash Join 思想，分布式 Join 机制脆弱（Global Join 广播全量数据消耗网卡，普通 Join 导致放大）。若右表超过几千万行极易直接抛出 `Memory limit exceeded` OOM 异常；
->    - **Apache Doris**：拥有完备的分布式 Cost-Based Optimizer (CBO) 优化器。能够自动识别大小表，支持 Broadcast Join、Shuffle Join、Colocation Join（本地化免网络关联），配合 Runtime Filter 动态下推，复杂 Join 性能达到甚至超越大宽表。
-> 3. **实时更新与 CDC 摄入（CDC & Primary Key Updates）**：
->    - **ClickHouse**：本质上是追加写入模型。执行 `ALTER TABLE UPDATE/DELETE` 属于重型的 Mutation 操作，底层会强制重写整个物理分区数据块，消耗海量 I/O 并引发查询延迟毛刺，严禁用于实时每秒高频流更新；
->    - **Apache Doris**：原生 Unique Key 配合 **Merge-on-Write（MoW）**，完美承接 Flink CDC 每秒数十万行的实时覆写，更新延迟在 1 秒以内，且查询端零读放大。
-> 4. **现代湖仓一体兼容性（Lakehouse Federation）**：
->    - **Apache Doris Multi-Catalog**：能直接挂载企业的 Hive Metastore、AWS S3 上的 Iceberg/Paimon/Hudi 表。查询优化器自动获取外表元数据和数据分片，利用 BE 的向量化引擎加速外表查询，**使得企业无需将历史数据搬迁入库，即可实现全网冷热数据的秒级统一探索**。”
+先给出读写比例、更新频率、查询模式和现有团队运维能力。以 Doris Unique Key 承接订单状态变更时，比较 ClickHouse 在同样更新与去重语义下的查询开销，不能用单表扫描跑分决定迁移。
 
-#### 架构师/技术管理视角（商业价值、领导力与落地抓手）：
-> “在技术管理与产品化交付层面（结合我在瑞纳智能主导企业级数据中台与太原项目验收的真实经验）：
-> **‘技术架构选型不仅要看跑分峰值，更要看工程交付的确定性与团队总拥有成本（TCO）’**：
-> 1. **破除‘唯跑分论’的技术迷信**：ClickHouse 在单表简单聚合压测中可能比 Doris 快 10%，但在真实的现代化企业复杂数仓中，90% 的业务都需要多表 Join、频繁的业务状态变更（订单状态流转）和多维灵活查询。为那 10% 的单表峰值性能，去承担极高的运维门槛和笨拙的宽表重写开发成本，在商业上是极其不经济的；
-> 2. **收敛技术栈，提升研发效能**：过去团队维护多套引擎（Hive 离线 + ClickHouse 大屏 + HBase 点查），知识体系高度碎片化，人员交接成本极高。我们将统一收敛至 Doris 作为实时分析与数据服务统一平台后：
->    - 研发人员只需使用标准 MySQL 协议与语法即可开发实时报表，入职培训周期由两周缩短至两天；
->    - 统一的元数据中枢配合湖仓外表，消除了多引擎间的数据搬迁与重复存储，太原项目现场验收中以‘开箱即用、一键拉起、故障自愈’赢得了评审专家的高度赞誉；
->    - 最终实现了全集团算力成本下降 35%、运维工时下降 50% 的显著商业回报。”
+#### 深入回答
+
+Doris 经典 FE/BE 模式与存算分离模式的依赖不同。ClickHouse 的复制表通常使用 Keeper 或 ZooKeeper 协调。两个系统均可执行 Join，应比较广播量、内存峰值、倾斜与落盘策略。ClickHouse ReplacingMergeTree 可追加版本行，后台合并前需通过查询处理重复版本。验收应覆盖乱序、删除和更正。[Doris 架构](https://doris.apache.org/docs/4.x/features-architecture/system-architecture/) · [ClickHouse 复制](https://clickhouse.com/docs/engines/table-engines/mergetree-family/replication) · [ClickHouse Join](https://clickhouse.com/docs/guides/joining-tables) · [ReplacingMergeTree](https://clickhouse.com/docs/engines/table-engines/mergetree-family/replacingmergetree)
+
+#### 架构师/技术管理视角
+
+对同一业务窗口回放峰值写入、复杂 Join 和后台合并，比较结果一致性、P95、值班成本和迁移成本。上线前约定切换水位与回退条件。
+
+---
+
+### 9.8 面试现场自然口述示范与一页纸速记卡（Day 11 复盘精华）
+
+> **口述目标定位**：在技术总监与资深数据架构师面试中，面试官考察实时 OLAP 时，核心聚焦于 **系统底层架构设计哲学（FE/BE 极简拓扑与高可用）、存储模型演进（MoW vs MoR 的读写放大权衡）、微架构计算加速（Pipeline 向量化与 Runtime Filter）、超高频实时写入稳定性治理（-235 错误根治）、以及架构选型与技术栈收敛的商业 ROI**。
+
+---
+
+#### 口述练习
+
+1. 先画经典 FE/BE 部署，再补出存算分离新增的 Meta Service、共享存储和本地缓存。解释缓存未预热的代价。
+2. 分别说明出现 -235 和 -238 时检查的第一项证据、调整批次的方向以及验收指标。
+3. 用同一份订单 CDC 数据比较两种 OLAP 引擎的写入与查询语义，给出可以复现的成本核算方法。
+
+---
+
+#### Day 11 一页纸速记卡（5 大黄金法则）
+
+```text
+====================================================================================================
+                        Apache Doris 实时 OLAP 架构 一页纸速记卡 (Day 11)
+====================================================================================================
+1. 经典部署包含 FE、BE，存算分离增加 Meta Service 与共享存储
+   - FE（Java）：BDB-JE 选主高可用，负责元数据管理与查询规划；支持 Leader/Follower/Observer 分工。
+   - BE（C++）：存算一体负责物理存储与向量化执行；扩缩容一行 SQL，Tablet 自动多副本迁移自平衡。
+----------------------------------------------------------------------------------------------------
+2. Unique 模型 MoW 减少读时归并
+   - MoR（读时合并）：写快但读慢，查询端需 KeyValueHeap 最小堆多路归并，读放大严重。
+   - MoW（写时合并）：写入时生成 Delete Bitmap 标记旧行，查询能跳过已失效行，收益需压测。
+----------------------------------------------------------------------------------------------------
+3. Pipeline 向量化与硬件级加速
+   - 打破传统 Volcano 阻塞逐行拉取；常驻固定线程池，基于数据就绪流式分块驱动执行。
+   - 深度适配 CPU AVX2/AVX-512 SIMD 硬件指令集，单条指令并行计算多个数据，CPU 吞吐推向极致。
+----------------------------------------------------------------------------------------------------
+4. -235 错误与版本积压有关
+   - 成因：高频小微批刷碎 Rowset 版本，堆积触及运行实例配置的版本上限时拒绝写入。
+   - 排查：读取对应 Tablet 的 VersionCount 和合并日志，再判断需降频或解除合并瓶颈。
+5. 架构选型
+   - 以有代表性的查询、CDC 数据与并发水平回放，比较成本、数据正确性与恢复时间。
+====================================================================================================
+```
 
 ---
 
 ## 10. 知识自检与口述推演清单
 
 - [ ] **白板手绘拓扑与时序**：能否脱稿在白板上画出 Doris 极简架构拓扑（FE Leader/Follower/Observer, BE Tablet, BDB-JE 状态机），并推导出实时 Stream Load 写入的两阶段提交（2PC）时序流转？
-- [ ] **三大数据模型核心差异推导**：能否清晰说出 Duplicate、Aggregate、Unique 三大模型的适用场景，并精准阐明 Unique 模型的写时合并（Merge-on-Write）相比读时合并（Merge-on-Read）如何利用 Delete Bitmap 消除读放大？
+- [ ] **三大数据模型核心差异推导**：能否清晰说出 Duplicate、Aggregate、Unique 三大模型的适用场景，并精准阐明 Unique 模型的写时合并（Merge-on-Write）相比读时合并（Merge-on-Read）如何利用 Delete Bitmap 减少读时归并？
 - [ ] **向量化与微架构优化口述**：能否向架构评审委员会讲透 Pipeline 引擎与传统 Volcano 模型的本质差异，并从操作系统物理线程绑定与 CPU SIMD 硬件指令集角度解释其性能提升的深层根因？
-- [ ] **生产排障实战推演**：面对生产环境中“实时接入频繁抛出 -235 [TOO_MANY_SEGMENTS]”的紧急告警，能否在 1 分钟内口述出包括 Flink 缓冲参数调优、BE Compaction 线程扩容与垂直合并（Vertical Compaction）的全链路治理招式？
-- [ ] **Runtime Filter 底层机制阐述**：能否向团队详细解释分布式 Hash Join 时 Runtime Filter（IN-List, BloomFilter, Min/Max）的构建与网络广播机制，以及为什么它能将大表网络 Shuffle 降低 80% 以上？
-- [ ] **架构师选型与领导力表达**：能否从分布式架构、多表关联、主键实时更新、运维复杂度与湖仓一体五个维度，深度陈述为什么现代企业应将实时 OLAP 技术栈收敛至 Apache Doris？
+- [ ] 面对写入拒绝，能否区分 -235 和 -238，给出各自的验证数据和处理顺序？
+- [ ] 能否沿查询计划解释 Runtime Filter 在什么数据分布下能减少 Shuffle？
+- [ ] 能否用相同业务口径比较两种 OLAP 引擎的成本、性能和故障行为？
 
 ---
 
@@ -743,7 +707,7 @@ graph LR
 ## 12. 权威参考与官方进阶资料
 
 1. **Apache Doris 官方最新参考手册 (v2.0 / 2.1 / 3.0)**：[Apache Doris Official Documentation](https://doris.apache.org/docs/)
-2. **Doris 向量化执行引擎设计白皮书**：[Apache Doris Vectorized Execution Engine](https://doris.apache.org/blog/vectorized-engine/)
-3. **Doris Pipeline 现代化执行框架解析**：[Pipeline Execution Engine in Apache Doris](https://doris.apache.org/docs/query-acceleration/pipeline-execution-engine/)
+2. **Doris 向量化执行机制**：[Apache Doris Vectorized Execution Engine](https://doris.apache.org/docs/4.x/key-features/vectorized-execution/)
+3. **Doris Pipeline 现代化执行框架解析**：[Pipeline Execution Engine in Apache Doris](https://doris.apache.org/docs/4.x/key-features/pipeline-execution-engine/)
 4. **Roaring Bitmap 经典论文**：Chambi, S., et al. (2016). *Better bitmap performance with Roaring bitmaps*. Software: Practice and Experience.
 5. **Google Mesa 架构设计论文（Doris 核心思想奠基）**：Gupta, A., et al. (2014). *Mesa: Geo-Replicated, Near Real-Time, Scalable Data Warehousing for Google’s Operations*. VLDB.

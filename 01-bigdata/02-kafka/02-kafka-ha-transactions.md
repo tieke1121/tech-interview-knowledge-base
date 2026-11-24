@@ -5,8 +5,8 @@ module: "01-bigdata"
 category: "02-kafka"
 version_target: "Apache Kafka 3.6+ / 3.7+ (KRaft 架构)"
 doc_status: "已完成"
-learning_status: "未学习"
-status: "未学习"
+learning_status: "学习中"
+status: "学习中"
 importance: "P0"
 last_reviewed: "2026-11-17"
 tags: ["大数据", "Kafka", "高可用", "事务机制", "幂等性", "跨机房容灾", "MirrorMaker", "生产排障", "技术管理"]
@@ -253,6 +253,14 @@ transaction.state.log.min.isr: 2
 # 事务管理器在空闲多长时间后回收 PID (默认 7 天)
 transactional.id.expiration.ms: 604800000
 ```
+
+### 4.3 生产代码实操工程（Kafka Exactly-Once 事务管道实战）
+针对技术面试中的现场手写代码（Live Coding）与事务一致性架构考评，本知识库已建立标准的源代码管理工程：
+- **完整源代码工程**：[code-demos/kafka-transaction-demo/](../../code-demos/kafka-transaction-demo/README.md)
+  - 核心事务管道服务：`TransactionalPipelineService.java`（严格实现 `initTransactions`、`beginTransaction`、`sendOffsetsToTransaction` 原子绑定消费位移与 2PC 提交）；
+  - 重平衡安全防御：`SafeRebalanceListener.java`（实现 `CooperativeStickyAssignor` 下的分区撤销感知与挂起事务中断）；
+  - 数据模型与测试：`TransactionRecord.java`、`TransactionalPipelineTest.java`；
+  - 架构答辩手册：系统推导 `__transaction_state` 2PC 时序、LSO 悬挂事务阻塞机制与高频大厂真题三层解答。
 
 ---
 
@@ -567,6 +575,62 @@ flowchart TD
 > 在瑞纳智能主导企业级数据中台与太原项目验收的真实历练中，我总结出两条至关重要的管理铁律：
 > 第一，**RPO 与 RTO 的量化共识必须前置白纸黑字签署**。技术团队绝不能对业务方口头承诺‘绝对零丢失零切换时间’，必须与合规部门和业务高管明确‘在极端断网切换时存在秒级数据补偿流程’，并配套建设自动化的对账修数服务，这是技术领导者成熟度的分水岭。
 > 第二，**容灾演练的常态化机制（Chaos Engineering）**。未经演练的容灾预案 99% 在真实故障时会失效。我们将 Kafka 节点随机下线、网络丢包注入与同城切流纳入每季度的‘红蓝对抗演练 SOP’中，以高度确定性的工程纪律守护千亿级核心资产的绝对安全。”
+
+---
+
+### 9.8 面试现场自然口述示范与一页纸速记卡（Day 05 复盘精华）
+
+#### 口述示范 A：Kafka 生产者幂等性（Idempotence）底层实现细节是什么？为什么无法保证跨分区与跨会话幂等？
+> “Kafka 开启 `enable.idempotence=true` 即可实现单分区内的精准一次写入，其底层机制基于**‘PID + 序列号（Sequence Number）+ 分区状态机’**：
+> 1. **底层核心三元组与校验逻辑**：
+>    - 生产者初始化时向 Broker 申请全局唯一的 64 位数字标识——**PID（Producer ID）**；
+>    - 针对每个发送的物理分区（Partition），客户端内部维护从 0 开始单调递增的 **Sequence Number（序列号）**；
+>    - Broker 端在内存中为每个 `<PID, Partition>` 维护最后落盘的最大序列号 `last_seq`；
+>    - 收到新消息时，Broker 严格执行代数校验：
+>      - 若 `new_seq == last_seq + 1`，说明消息严格保序且未丢失，正常写入并推进 `last_seq`；
+>      - 若 `new_seq <= last_seq`，说明因网络抖动触发了重试、该消息之前已成功写入，Broker **直接向客户端返回 ACK 成功，但底层静默丢弃该重复包，杜绝重复写入**；
+>      - 若 `new_seq > last_seq + 1`，说明中间有数据在网络中丢失，抛出 `OutOfOrderSequenceException` 触发上游重试。
+> 2. **为什么无法跨分区和跨会话幂等**：
+>    - **无法跨分区**：Sequence Number 是绑定在单个物理 Partition 内部的，不同分区的序列号互相独立，无法保证多分区之间的全局去重；
+>    - **无法跨会话**：PID 是临时分配的内存状态。如果 Producer 进程挂掉重启，会被分配一个全新的 PID，旧会话已发送的数据与新会话无法串联去重。若要突破这两大限制，必须升级使用 **Kafka 事务机制（Transactional ID）**。”
+
+#### 口述示范 B：Kafka 分布式事务底层实现机制与 2PC 流程是什么？LSO 是如何控制未提交数据隔离性的？
+> “Kafka 事务是实现跨多 Topic、多 Partition 原子性写入与‘消费-处理-生产’端到端 EOS 的核心底座：
+> 1. **两大核心组件与 2PC 流程**：
+>    - **Transaction Coordinator（事务协调器）**：运行在特定 Broker 上的组件，负责维护 Producer 的事务状态机；
+>    - **`__transaction_state` 系统主题**：持久化所有事务状态变更日志（支持 Raft/多副本高可靠）；
+>    - **两阶段提交（2PC）时序**：
+>      - ① 生产者显式指定稳定的 `transactional.id`，调用 `initTransactions()` 获取 PID 并递增 `Producer Epoch`（封杀旧僵尸实例）；
+>      - ② 开启事务并向 Coordinator 注册本次涉及的目标分区；
+>      - ③ 生产者向各数据分区正常发送消息，**注意：数据是实时追加写入目标分区的物理 Log Segment 的**；
+>      - ④ 预提交阶段（Commit Request）：Coordinator 在 `__transaction_state` 中写入 `PREPARE_COMMIT` 状态日志；
+>      - ⑤ 正式提交阶段：Coordinator 异步向所有涉及的数据分区写入一条特殊的**控制报文（Control Batch，包含 COMMIT 标记）**；
+>      - ⑥ Coordinator 写入 `COMMITTED` 终态，事务圆满闭环。
+> 2. **LSO（Last Stable Offset）对下游消费者的隔离控制**：
+>    - 分区中第一个尚未确认（处于 Ongoing 未决状态）的事务消息位点被称为 **LSO**；
+>    - 下游消费者配置为 `isolation.level = read_committed` 时，**消费者只能读取到 LSO 之前的数据**；
+>    - 哪怕后续又有普通消息或新事务写入推高了 HW，只要最前面的未决事务未完成，消费者就会被严格阻断在 LSO 之前，从根源上消灭了脏读。”
+
+#### 口述示范 C：生产线上“悬挂事务（Hanging Transaction）”卡死 LSO 导致下游全链路消费积压怎么应急与治本？跨机房两地三中心容灾如何设计与权衡？
+> “在真实生产运维中，这是一套极具实战含金量的排障与容灾方案：
+> 1. **悬挂事务卡死 LSO 的排查与应急解毒**：
+>    - **故障特征**：某 Topic 消费者的 Lag 持续飙升几十万，但 Consumer 进程无任何报错，只是停滞不前。这是因为某个 Producer 崩溃后既没 Commit 也没 Abort，导致分区 LSO 永久卡死；
+>    - **应急解毒（一键穿透）**：查出该悬挂事务对应的 `transactional.id`，在终端启动一个临时脚本，使用相同的 `transactional.id` 依次调用 `initTransactions() -> beginTransaction() -> abortTransaction()`。协调器会立刻利用新的 Epoch 夺取控制权，**并在底层分区强行追加一条 ABORT 控制报文，LSO 瞬间向前跳过卡死位点，秒级解冻全链路下游消费**；
+>    - **治本措施**：在 Broker 侧核准配置合理的 `transactional.id.expiration.ms`，杜绝孤儿事务永久驻留。
+> 2. **两地三中心多集群容灾架构权衡（同城双活 + 异地冷备）**：
+>    - **为什么不推荐同城大专线单集群拉远（Stretched Cluster）**：将同一个 Kafka 集群物理跨机房部署会导致每次写入强制等待跨机房光纤延迟（增加 5~10ms），且光缆微抖动会引发全集群大规模 ISR 震荡；
+>    - **推荐方案：独立双集群 + MirrorMaker 2.0 异步复制**：
+>      - 同城 A/B 两个机房部署各自独立的 Kafka 集群。日常由 DC-A 承载生产，通过高可用 MM2 集群以异步方式将数据单向同步至 DC-B；
+>      - MM2 自动向 `__checkpoints` 主题持续更新跨集群 Offset 映射关系；
+>      - 发生机房级灾难时，通过域名切流，灾备消费组读取位点映射表无缝接管，**以毫秒级 RPO（数据滞后 $< 500\text{ms}$）为代价，换取主集群 100% 极速吞吐与网络强隔离**；
+>      - 异地 C 中心采用冷备集群定期归档，满足 7 年合规审计要求。”
+
+#### Day 05 一页纸速记卡
+1. **幂等性底层三要素**：`<PID, Partition, SequenceNumber>`；Broker 依据 `seq == last_seq + 1` 判定保序，`seq <= last_seq` 判定重试并静默丢弃防重；仅保单会话单分区有效。
+2. **事务两阶段提交（2PC）**：`TransactionalId` 绑定 Coordinator $\to$ 注册分区 $\to$ 实时写物理日志 $\to$ 写 `__transaction_state` 的 `PREPARE_COMMIT` $\to$ 向数据分区写 `Control Batch (COMMIT)` $\to$ 写终态 `COMMITTED`。
+3. **LSO 水位防脏读**：`LSO` 是未决事务的最小位点；`read_committed` 消费者严禁越过 LSO；事务未提交前数据在物理磁盘，但对下游严格不可见。
+4. **悬挂事务一键解毒**：Producer 异常挂死会导致 LSO 卡住下游；解毒方案是用相同 `transactional.id` 启动临时客户端调用 `abortTransaction()` 强行写入 ABORT 控制标记推高 LSO。
+5. **两地三中心容灾选型**：坚决避免单集群跨机房强同步拉远（防网络延迟与 ISR 震荡）；推崇 **独立双集群 + MirrorMaker 2.0 异步复制**（RPO $<500\text{ms}$、RTO $<3\text{min}$），平衡吞吐与灾备。
 
 ---
 

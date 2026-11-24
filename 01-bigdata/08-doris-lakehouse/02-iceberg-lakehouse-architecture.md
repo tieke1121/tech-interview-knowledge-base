@@ -5,15 +5,17 @@ module: "01-bigdata"
 category: "08-doris-lakehouse"
 version_target: "Apache Iceberg 1.5+ / 1.6+ (Format V2)"
 doc_status: "已完成"
-learning_status: "未学习"
-status: "未学习"
+learning_status: "学习中"
+status: "学习中"
 importance: "P0"
-last_reviewed: "2026-11-17"
+last_reviewed: "2026-11-24"
 tags: ["大数据", "数据湖", "Lakehouse", "Apache Iceberg", "ACID", "快照隔离", "架构设计"]
 ---
 # Apache Iceberg架构与数据湖存储内核：快照隔离、元数据树、隐式分区、并发提交乐观锁与小文件治理
 
-> **学习目标定位**：面向技术总监、数据平台研发负责人、高级数据架构师岗位，系统掌握现代数据湖开放表格式标准 Apache Iceberg 的底层设计哲学。深入剖析四层元数据树（Catalog、Metadata File、Manifest List、Manifest File）的剪枝寻址机制、基于乐观并发控制（OCC）与 CAS 原子提交的快照隔离（Snapshot Isolation）、隐式分区与分区演进、Format V2 行级更新（Position/Equality Delete）以及生产级小文件治理。结合互联网大厂高频面试真题与百 PB 级湖仓生产实践，建立针对 CommitFailedException 冲突规避、Delete File 读放大治理、统一 REST Catalog 建设与湖仓存算分离成本 ROI 的全景把控能力。
+> 本讲义用 Iceberg 表格式 V2 说明文件组织、快照、行级更正与运维。
+
+> [!NOTE] 案例性质说明：大促规模、延迟、资源参数与部署方案均为教学推演。
 
 ---
 
@@ -21,25 +23,25 @@ tags: ["大数据", "数据湖", "Lakehouse", "Apache Iceberg", "ACID", "快照�
 
 ### 1.1 是什么（What）
 - **技术定位**：Apache Iceberg 是一种用于超大规模分析型数据集的高性能开源开放表格式（Open Table Format）。由 Netflix 原创设计并贡献给 Apache 基金会，旨在彻底解决传统大数据数仓在云原生对象存储与分布式文件系统上的性能与一致性缺陷。
-- **现代化架构抽象**：Iceberg 不依赖计算引擎亦不绑定底层物理存储，它将“表（Table）”抽象为**不可变文件的集合（A collection of files）**，把原本属于分布式文件系统目录树的元数据管理，**全部下沉到文件级别的树状元数据文件中**。
+- **现代化架构抽象**：Iceberg 不依赖计算引擎亦不绑定底层物理存储，它将“表（Table）”抽象为**不可变文件的集合（A collection of files）**，把表级快照、分区和文件索引记录在分层元数据中。
 - **最新演进标准（Iceberg 1.5+ / 1.6+ 与 Format V2/V3）**：
   - **Format V2 行级更新标准**：原生支持通过 Delete Files（Position Delete 与 Equality Delete）实现行级 UPDATE 与 DELETE，提供写时复制（CoW）与读时合并（MoR）双模支持；
   - **REST Catalog 成为事实工业标准**：彻底解耦传统重型 Hive Metastore，以轻量级标准 HTTP RESTful 协议作为跨云、跨引擎统一元数据目录；
-  - **多引擎无缝互操作**：Apache Spark、Trino、Presto、Apache Flink、Apache Doris、ClickHouse 均原生内置高性能 Iceberg 读写 Connector。
+  - **多引擎互操作**：兼容性取决于读写引擎与连接器版本。尤其要验证 format version、delete file 类型、写入方式与 Catalog。
 
 ### 1.2 解决什么核心业务痛点（Why）
 - **传统 Hive 目录扫描（Directory Listing）在对象存储上的灾难**：
-  - 传统 Hive 表的分区映射为物理目录树结构（如 `/year=2026/month=11/day=17/`）。当表包含数万个分区、数百万个文件时，查询必须向文件系统发起数万次递归的 `listStatus` 调用；
-  - 在 AWS S3 或对象存储上，每次 Listing 都是一次高开销的 HTTP GET 请求，不仅耗时长达数分钟，且极易触发对象存储的限流（HTTP 503 Slow Down）。Iceberg 将文件元数据直接内嵌在元数据树中，**以 $O(1)$ 时间复杂度获取文件列表，完全消灭 Listing 开销**。
-- **缺乏 ACID 事务与并发读写冲突**：传统 Hive 表在写入过程中数据对读端是部分可见的（脏读），多个写入作业并发追加或覆盖时极易产生数据覆盖、文件残留和不可逆的脏状态。Iceberg 提供快照隔离（Snapshot Isolation），实现**读写互不阻塞、并发写入原子提交**。
-- **分区规则与物理路径强绑定的僵化痛点**：传统数仓一旦建表指定了分区字段，若业务发展需要修改分区规则（如从按天改为按小时），只能全量重新洗数新建一张表并重构所有下游流水线。Iceberg 的**隐式分区与分区演进（Partition Evolution）** 允许随时动态调整分区策略，无需重写历史历史数据。
+  - 普通非事务 Hive 分区表在分区裁剪后，常需枚举相关分区目录中的文件。目录项多时，分页请求和限流会拖慢规划。
+  - Iceberg 通过已提交快照定位 manifest list 和候选 manifests，避免为发现数据文件递归列目录。筛选清单与文件仍需工作量，受候选条目数和统计质量影响。[可靠性说明](https://iceberg.apache.org/docs/latest/reliability/)
+- **并发一致性**：非事务 Hive 表缺乏表级快照发布约定。Iceberg 通过原子发布元数据使读者看到一个完整版本；Hive ACID 表有自己的事务机制。
+- **分区规则与物理路径强绑定的僵化痛点**：传统数仓一旦建表指定了分区字段，若业务发展需要修改分区规则（如从按天改为按小时），只能全量重新洗数新建一张表并重构所有下游流水线。Iceberg 的**隐式分区与分区演进（Partition Evolution）** 允许随时动态调整分区策略，无需重写历史数据。
 
 ### 1.3 适用场景与技术边界（Where & When）
 - **最佳业务场景矩阵**：
   - **百 PB 级统一企业湖仓底座（Lakehouse Base）**：承接海量全量明细与近实时（分钟级）增量摄入，作为离线分析与近实时分析的一体化底座；
   - **云原生存算分离架构**：基于对象存储（S3/OSS/GCS/MinIO/Ceph）构建高可靠、低成本存储层；
-  - **数据合规与金融审计（Time Travel / Rollback）**：利用时间旅行能力精确回溯历史任意时间点的快照，支撑 GDPR “被遗忘权”合规删除与财务历史对账；
-  - **CDC 实时流水镜像入湖**：结合 Flink CDC，将 MySQL/PostgreSQL/Oracle 的 Binlog 增量无感写入 Iceberg 表。
+  - **历史审计**：对仍保留的快照可按提交时间或 ID 重算报表。清理隐私数据还需考虑历史快照、备份与保留义务。
+  - **CDC 入湖**：可通过合适的连接器消费上游变更日志。更新和删除还需配置对应的写入模式，并验证下游兼容性。
 - **明确反模式与技术禁区（严禁使用）**：
   - ❌ **毫秒级极速高并发在线点查（< 10ms）**：Iceberg 是表格式，虽然支持剪枝，但点查仍然需要解析元数据树并拉取 Parquet 文件，毫秒级高 QPS API 必须外沉至 Doris 或 HBase；
   - ❌ **超高频单条小微流式写入（每秒数次提交）**：高频提交会导致元数据快照迅速膨胀数万个，导致元数据管理雪崩，流式写入必须设置分钟级（如 1~3 分钟）提交窗口。
@@ -53,7 +55,7 @@ tags: ["大数据", "数据湖", "Lakehouse", "Apache Iceberg", "ACID", "快照�
 | 核心组件/概念 | 英文术语 | 核心定义与工程职责 | 资源/生命周期级别 |
 | :--- | :--- | :--- | :--- |
 | **元数据目录** | Catalog | 记录表名到当前最新“元数据指针（Metadata Pointer）”的映射关系。支持 REST Catalog、Hive Catalog、Nessie、JDBC 等。 | 集群/企业级统一中枢 |
-| **表元数据文件** | Metadata File (`.metadata.json`) | 存储表的全局核心元数据：Schema 定义、分区规格（Partition Spec）、排序规则、所有快照历史日志及当前活跃快照 ID。 | 表级状态版本（不可变对象） |
+| **表元数据文件** | Metadata File (`.metadata.json`) | 存储表的全局核心元数据：Schema 定义、分区规格（Partition Spec）、排序规则、仍保留的快照历史及当前活跃快照 ID。 | 表级状态版本（不可变对象） |
 | **清单列表文件** | Manifest List (`snap-xxx.avro`) | 代表某一个特定快照（Snapshot）。内部记录该快照所引用的所有 Manifest Files 路径及其分区边界统计信息。 | 快照级元数据文件 |
 | **清单文件** | Manifest File (`xxx.avro`) | 记录具体的数据文件（Data File）或删除文件（Delete File）的实际物理路径、文件状态（ADDED/EXISTING/DELETED）及列级统计。 | 文件切片级元数据 |
 | **实际物理数据文件** | Data File (`.parquet` / `.orc`) | 存储实际业务数据的列式文件。包含完整的列索引与编码数据。 | 底层物理存储文件 |
@@ -121,7 +123,7 @@ graph TD
      - 读取其中每个 Data File 记录的**列级统计信息（Column Statistics: Min, Max, NullCount, NaNCount）**；
      - 针对非分区列 `order_id = 10029384` 进行判定：若某文件的 `order_id` 取值范围是 `[1, 5000000]`，直接跳过该物理数据文件；
   4. **第四层：物理 Parquet 加载与 Delete File 过滤**：
-     - 最终仅锁定精准命中的 1~2 个 Parquet 物理文件，并在内存中结合关联的 Position Delete File 剔除已删除行，完成读取。
+     - 引擎读取仍可能命中的 Parquet 文件，应用原始谓词和适用的删除记录。缺少统计或取值范围重叠时，可能仍需读取许多文件。
 
 ---
 
@@ -139,27 +141,18 @@ sequenceDiagram
     W1->>Cat: 1. 读取当前表元数据指针 (基准快照 S0, 指向 v1.metadata.json)
     W2->>Cat: 2. 读取当前表元数据指针 (基准快照 S0, 指向 v1.metadata.json)
 
-    Note over W1,Storage: 客户端在本地生成数据并写出新元数据文件
-    W1->>Storage: 写入物理 Data Files 并生成新 Manifest 文件
-    W1->>Storage: 生成新的 v2.metadata.json (基于快照 S0 增加快照 S1)
-    W2->>Storage: 写入物理 Data Files 并生成新 Manifest 文件
-    W2->>Storage: 生成新的 v2.metadata.json (基于快照 S0 增加快照 S2)
-
-    Note over W1,Cat: 3. 提交阶段: 乐观并发控制 (CAS 原子操作)
-    W1->>Cat: 提交原子变更: Swap(v1.metadata.json -> v2.metadata.json)
-    Cat-->>W1: CAS 成功! 当前最新快照更新为 S1
-
-    W2->>Cat: 提交原子变更: Swap(v1.metadata.json -> v2.metadata.json)
-    Cat-->>W2: CAS 失败! 当前指针已变为 S1 (抛出 CommitFailedException)
-
-    Note over W2,Cat: 4. 冲突检测与自动重试 (Auto-Retry)
-    W2->>W2: 检查冲突: 校验 S1 与 S2 是否修改了相同分区/重叠文件?
-    alt 无物理文件冲突 (如写入不同分区)
-        W2->>Storage: 重新基于 S1 生成合法的 v3.metadata.json
-        W2->>Cat: 重新发起 CAS 提交: Swap(S1 -> v3.metadata.json)
-        Cat-->>W2: 提交成功!
-    else 存在不可调和的冲突 (如修改了同一行或重写了同一文件)
-        W2-->>W2: 彻底报错中止，回滚清理未引用的临时文件
+    W1->>Storage: 写出数据和清单文件 A
+    W2->>Storage: 写出数据和清单文件 B
+    W1->>Cat: 基于 S0 提交本次更新
+    Cat-->>W1: 原子发布成功，产生 S1
+    W2->>Cat: 基于 S0 提交本次更新
+    Cat-->>W2: 基线已发生变化
+    W2->>W2: 读取最新元数据，检查操作前提
+    alt 校验通过且允许重试
+        W2->>Cat: 基于 S1 再次提交
+        Cat-->>W2: 发布成功
+    else 源文件已被其他作业替换
+        W2-->>W2: 停止本次更新并重新规划
     end
 ```
 
@@ -187,7 +180,7 @@ sequenceDiagram
 ### 4.1 生产级表设计规范与 Format V2 选型
 
 ```sql
--- 生产级标准 Iceberg 表创建规范 (基于 Spark SQL / Trino)
+-- Spark SQL 示例，已配置 Iceberg Catalog 与相应扩展
 CREATE TABLE lakehouse_prod.trade.dwd_order_fact (
     `order_id` BIGINT COMMENT "订单唯一主键",
     `buyer_id` BIGINT COMMENT "买家用户ID",
@@ -241,7 +234,7 @@ TBLPROPERTIES (
 
 #### 2. 快照生命周期过期（Expire Snapshots）
 - **根因**：每个快照都保留其关联的 Manifest 列表，长期不清理导致元数据树爆炸（数万快照）；
-- **治理 SOP**：通过定时调度清理历史快照，通常保留最近 7 天（用于 Time Travel 审计与故障回退）：
+- **治理 SOP**：以下日期和保留个数为示例。执行前核对审计保留期、分支和标签、在运行作业的最后成功提交及恢复窗口。[维护指南](https://iceberg.apache.org/docs/latest/maintenance/) · [流写快照要求](https://iceberg.apache.org/docs/latest/flink-writes/)
   ```sql
   CALL lakehouse_prod.system.expire_snapshots(
       table => 'trade.dwd_order_fact',
@@ -252,11 +245,12 @@ TBLPROPERTIES (
 
 #### 3. 清理孤儿文件（Delete Orphan Files）
 - **根因**：当写入作业中途崩溃（如 Task 失败），遗留在对象存储上的临时未提交数据文件将不再被任何快照引用，成为占用磁盘空间的“幽灵文件”；
-- **治理 SOP**：每周定时触发清理：
+- **治理 SOP**：示例先预览候选文件。确认路径映射正确，且文件年龄超过最长在途写入和恢复时长，再安排清理。[孤儿文件清理](https://iceberg.apache.org/docs/latest/maintenance/)
   ```sql
   CALL lakehouse_prod.system.remove_orphan_files(
       table => 'trade.dwd_order_fact',
-      older_than => TIMESTAMP '2026-11-14 00:00:00'
+      older_than => TIMESTAMP '2026-11-14 00:00:00',
+      dry_run => true
   );
   ```
 
@@ -266,10 +260,10 @@ TBLPROPERTIES (
 
 | 监控维度 | 关键指标名称 (JMX / REST Metric) | 告警触发阈值 | 潜在业务风险与处置策略 |
 | :--- | :--- | :--- | :--- |
-| **提交冲突率** | `commitMetrics.totalDuration` / RetryCount | **连续重试 > 3 次** | 存在高并发写入踩踏，需检查并发流作业是否在同一个分区执行盲写。 |
-| **元数据体积** | `total-snapshots` (总快照数量) | **> 1,000 个** | 元数据严重膨胀，查询计划生成延迟突破数秒。立即触发 `expire_snapshots`。 |
-| **删除文件比例** | `total-position-deletes / total-data-files` | **> 30%** | 读时合并（MoR）读放大严重恶化，查询出现严重长尾。调度 `rewrite_data_files`。 |
-| **小文件占比** | `total-data-files / total-records` | **平均文件 < 32MB** | 碎片文件打满存储，触发离线数据重写合并。 |
+| **提交重试** | 提交时长、重试次数、异常类型 | 连续超过业务延迟预算 | 区分 Catalog 可用性、基线版本变化和数据冲突。 |
+| **元数据体积** | 快照数、manifest 数、规划时间 | 相对基线持续上升 | 先判断慢在元数据读取还是筛选，结合保留期选择维护操作。 |
+| **删除文件** | 命中的删除文件数、应用删除的耗时 | 读时合并已影响 SLA | 针对受影响的文件组评估重写。 |
+| **文件大小** | 数据文件总字节 / 数据文件数，及大小分布 | 小文件比例持续上升 | 核对写入分布、并行度、提交频率与文件重写成本。 |
 
 ---
 
@@ -279,15 +273,12 @@ TBLPROPERTIES (
 
 ```mermaid
 flowchart TD
-    Alert["生产监控告警: Flink/Spark 写入 Iceberg 表频繁失败<br/>抛出: CommitFailedException: Cannot commit, found conflicts"] --> Step1["第 1 步: 分析冲突类型与并发提交源"]
-    Step1 --> CheckSource{"是否属于多流并发写入同一张表?"}
-    CheckSource -->|是: 多作业并发写入| Step2["第 2 步: 排查写入分区与操作模式"]
-    Step2 --> CheckPartition{"作业之间写入的数据分区是否严格隔离?"}
-    CheckPartition -->|分区未隔离: 冲突碰撞| RootPConflict["根因 1: 多个作业同时向同一分区提交写操作, 触发 OCC 冲突<br/>SOP: 业务按租户/业务域拆解写入分区, 或接入单流汇聚"]
-    CheckPartition -->|已按分区隔离| RootRetry["根因 2: 乐观锁重试等待参数配置过小<br/>SOP: 调大 commit.retry.num-retries 与等待抖动退避时间"]
-    CheckSource -->|否: 单一作业失败| Step3["第 3 步: 检查底座 Catalog 与存储状态"]
-    Step3 --> CheckCatalog{"Catalog (HMS/REST) 响应是否超时?"}
-    CheckCatalog -->|是: 元数据响应超时| RootCat["根因 3: Catalog 底层数据库锁争抢导致 CAS 超时<br/>SOP: 升级为独立高可用 REST Catalog, 优化连接池"]
+    Alert["提交失败或超时"] --> Kind{"异常类型和 Catalog 状态"}
+    Kind -->|提交结果未知| Check["核实快照和应用批次记录，防止重复提交"]
+    Kind -->|基线元数据已变化| Validate["刷新后验证操作前提"]
+    Validate -->|可重试| Retry["在退避和预算内重新提交"]
+    Validate -->|输入已替换或谓词冲突| Replan["使用新快照重新规划操作"]
+    Kind -->|服务或存储故障| Service["排查 Catalog 与存储请求延迟和可用性"]
 ```
 
 ---
@@ -299,35 +290,22 @@ flowchart TD
 - **深层根因推导**：
   1. 离线批处理 `MERGE INTO` 是一个大事务，执行时间长达数十分钟，在准备提交时会尝试向 Catalog 申请 CAS 状态跃迁；
   2. 实时 Flink 任务每 2 分钟提交一次 Checkpoint；
-  3. 当两个事务同时修改了相同的分区，OCC（乐观并发控制）在校验冲突时发现：**批处理任务在计算期间，Flink 已经基于旧快照提交了新的版本并修改了当前分区的 Manifest 列表**；
-  4. 系统判定数据可能发生“覆盖丢失”，强制抛出不可调和的冲突异常，导致流作业被杀死。
-- **架构级解决方案（三步治理）**：
-  - **隔离设计**：将实时数据流与离线批处理的目标表解耦。实时流只写入 `dwd_order_fact_realtime`（Append-Only），离线批处理每日将纠错结果合并入全量表，禁止多作业并发跨模写同一表；
-  - **开启行级冲突检测宽松策略**：
-    在表属性中开启行级冲突检测（Row-level Conflict Detection）：
-    ```sql
-    ALTER TABLE lakehouse_prod.trade.dwd_order_fact 
-    SET TBLPROPERTIES ('write.merge.isolation-level' = 'snapshot');
-    ```
-  - **参数调优（加大重试缓冲垫）**：
-    ```properties
-    commit.retry.num-retries = 10
-    commit.retry.min-wait-ms = 200
-    commit.retry.max-wait-ms = 5000
-    ```
+  3. 若仅是提交基线变化，刷新表元数据，在重试预算内重新验证。不同提交时间、写入同一分区，都不足以单独证明数据冲突；
+  4. 若批作业依赖的输入文件已被替换，或新数据触发了当前隔离级别的冲突检查，应重新读取并规划，不能原样重试。
+- **架构级处置**：根据异常栈区分 Catalog/网络失效、提交竞争、数据校验失败。为一次性回灌设定清晰的输入快照与写入边界；若冲突集中在重叠业务窗口，错峰或分区处理。调低隔离级别会改变业务语义，须先验证并发更正结果。[并发提交](https://iceberg.apache.org/docs/latest/reliability/)
 
 #### 故障二：Format V2 表运行 3 个月后，查询 P99 延迟由 800ms 恶化至 45 秒
 - **现象**：业务查询相同的单日范围，最初执行仅需 800ms，系统上线 3 个月后，查询相同数据耗时暴涨 50 倍，Trino/Spark 节点 CPU 持续打满。
 - **深层根因分析**：
   1. 业务端为了实现状态更新，频繁调用 `UPDATE` 语句；
-  2. 表配置为 `write.delete.mode = 'merge-on-read'`。每次更新并未物理修改数据，而是写出包含被删除行物理行号的 **Position Delete File**；
+  2. 此处假设 Spark 使用 `write.update.mode = 'merge-on-read'`，更新会写出新行并记录被替换的旧行。写入引擎决定具体使用的删除表示；
   3. 3 个月内，该表积累了超过 **100 万个微型 Delete Files**；
-  4. 当查询引擎读取一个 Data File 时，必须通过网络同时拉取相关的数百个 Delete Files，在内存中构建 Hash 集合进行行号比对，**CPU 完全被内存行级过滤与大量的零碎 I/O 吞噬，发生极端的读放大（Read Amplification）灾难**。
+  4. 当查询引擎读取一个 Data File 时，需要加载适用于该数据文件的删除记录，按位置或字段值应用过滤，**CPU 完全被内存行级过滤与大量的零碎 I/O 吞噬，发生极端的读放大（Read Amplification）灾难**。
 - **架构级治理 SOP**：
   - **第一步：建立离线合并作业巡检基线**：
     制定调度规则，在每周日低峰期针对更新频繁的表，强制调度 `rewrite_data_files`，执行物理 Compaction 将 Delete Files 与 Data Files 彻底重写合并；
   - **第二步：针对高频点查模型改选写时复制（CoW）**：
-    若该表主要是读多写少、但对读延迟极度敏感，将属性改为 `write.update.mode = 'copy-on-write'`，在写入端以多消耗写入算力为代价，确保读取端始终为纯净的单路大文件，彻底消灭读放大。
+    若该表主要是读多写少、但对读延迟极度敏感，将属性改为 `write.update.mode = 'copy-on-write'`，在写入端以多消耗写入算力为代价，减少后续更新产生的删除文件。已有删除文件仍需纳入维护。
 
 ---
 
@@ -367,7 +345,7 @@ flowchart TD
 - **背景与痛点**：过去企业通过 Hive Metastore (HMS) 纳管 Iceberg 表。但当集群规模达到几十万张表、数百个计算节点并发访问时，HMS 的 MySQL 后端连接池被打满，成为全集群单点故障源，且无法跨多数据中心或混合云打通。
 - **落地架构方案：构建统一 REST Catalog 服务**：
   - 部署轻量级、无状态的 **Apache Iceberg REST Catalog（如 Apache Polaris 或自研 REST 服务）**；
-  - 所有计算引擎（Spark、Flink、Trino、Doris）统一通过 HTTP 协议请求 REST API 获取表元数据；
+  - 在确认各引擎和版本支持同一 REST Catalog 后，统一通过 REST API 获取表元数据；
   - **核心管理收益**：
     1. **权限统一鉴权**：在 REST API 网关层统一集成 OAuth2 / JWT 与企业 LDAP，实现表级与列级细粒度安全鉴权；
     2. **元数据多级缓存**：在 REST 服务端实施元数据内存缓存（Redis），将高频表的元数据解析延迟压缩至 5 毫秒内；
@@ -378,12 +356,11 @@ flowchart TD
 ### 7.2 生产变更红线与降级容灾预案（SOP）
 
 #### 生产变更四大不可逾越红线：
-1. **严禁业务开发在 SQL 中使用无主键的无限制 Equality Delete**：
-   - 全表扫描式的等值删除会生成极度消耗内存的 Equality Delete 文件，直接导致下游查询时发生 OOM 崩溃；必须强制基于唯一主键进行 Position Delete。
+1. **评估行级更新的兼容性**：记录写入者生成的删除文件类型，验证各读引擎能正确应用删除。Position Delete 需要文件路径和行号，Equality Delete 用指定字段的值匹配旧行。
 2. **严禁在未配置小文件合并任务的情况下直接上线 Flink 流式入湖**：
    - 凡是接入 Flink 流式写入 Iceberg 的表，在中台必须同时绑定夜间自动执行的 `rewrite_data_files` Compaction 定时任务，否则审批流直接阻断上线。
 3. **快照保留周期严格约束**：
-   - 默认表属性必须配置快照过期时间：`'history.expire.max-snapshot-age-ms' = '604800000'`（7天），严禁保留无限期快照导致元数据雪崩。
+   - 以回溯、审计、流作业恢复的实际窗口配置保留时间和最少快照数，演练旧报表重算。
 4. **禁止单表文件数超过 100 万而不执行清理**：
    - 建立元数据监控探针，当检测到单表 Manifest 数量超过 500 个时，自动触发 `rewrite_manifests` 整理清单索引。
 
@@ -392,11 +369,11 @@ flowchart TD
 ## 8. 互联网大厂高频面试真题库
 
 > [!IMPORTANT]
-> 本板块精选一线互联网大厂（阿里、字节、美团、腾讯、快手）真实高频考察的 7 道数据湖核心真题。**在第 9 板块中已对全部题目进行逐题完整三层金字塔深度解答，严禁留白。**
+> 本节为 7 道机制与架构推演题。逐题可查公开面经的题目见 [数据湖面试六问](../../08-interview-questions/04-data-lake.md)。
 
 ### 8.1 基础概念与存储内核题（大厂初筛）
 1. **Q1**：请详细阐述什么是 Apache Iceberg？它与传统 Hive 格式相比，底层元数据管理机制有何本质突破？
-2. **Q2**：请在白板上画出 Iceberg 的元数据树（Metadata Tree）四层拓扑结构（Catalog、Metadata File、Manifest List、Manifest File、Data File），并详细推导一次查询如何逐级剪枝？
+2. **Q2**：请在白板上画出 Iceberg 的元数据树（Metadata Tree）寻址路径（Catalog、Metadata File、Manifest List、Manifest File、Data File），并详细推导一次查询如何逐级剪枝？
 
 ### 8.2 并发事务与核心特性题（大厂资深技术面）
 3. **Q3**：Iceberg 是如何基于乐观并发控制（OCC）实现 ACID 事务与快照隔离的？当多个写入作业发生冲突时，底层是如何检测并进行自动重试的？
@@ -426,25 +403,20 @@ flowchart TD
 #### 深入回答（技术细节展开、底层机制与推导）：
 > “深入对比 Hive 目录模型与 Iceberg 文件模型的底层机制差异：
 > 1. **元数据管理维度的突破性优势**：
->    - **传统 Hive**：表元数据存储在关系型数据库（HMS MySQL）中，但其记录的粒度仅停留在‘分区与目录路径级别’。每次执行查询，引擎必须向 HDFS/S3 发起全量目录递归扫描（`listStatus`）以获取实际的数据文件。当包含 10 万个分区时，S3 Listing 耗时长达数分钟，且容易触发 HTTP 503 限流；
->    - **Apache Iceberg**：元数据粒度精细到‘单个物理数据文件级别’。通过四层元数据树（Metadata File $\rightarrow$ Manifest List $\rightarrow$ Manifest File），直接记录了每一个数据文件的路径、大小、行数与列级 Min/Max 统计，**在内存中完成文件级定位，完全不需要对物理存储做任何 Listing 操作**。
+>    - **普通非事务 Hive 表**：Metastore 保存分区位置，引擎通常列出命中分区中的数据文件。
+>    - **Iceberg**：通过表元数据、manifest list 和 manifests 筛选候选文件，规划工作量取决于需要读取的清单及其条目。
 > 2. **事务与一致性保障机制**：
->    - **Hive**：无真正的事务隔离。写入数据时文件直接追加至目录，并发写入极易发生数据覆盖或脏读；
+>    - **非事务 Hive 表**：缺少 Iceberg 式表级快照发布约定。Hive ACID 表应单独比较。
 >    - **Iceberg**：写入过程完全基于不可变文件的增量生成。只有当所有数据落盘并生成新的元数据树后，才通过 Catalog 发起一次原子性的 CAS（Compare-And-Swap）指针更新，**对外提供严格的快照隔离（Snapshot Isolation），实现真正的读写并发无锁互不阻塞**。
 > 3. **Schema 与分区演进支持**：
->    - Hive 修改列名或分区规则，物理目录必须全部移动或重写；Iceberg 通过唯一列 ID（Column ID）追踪字段，重命名或加列无需物理重写数据。”
+>    - **字段与分区演进**：Iceberg 用稳定的列 ID 追踪重命名，以 partition spec 标识每套布局。既有文件可按旧布局读，新数据按新规则写。
 
 #### 架构师/技术管理视角（降维升华、权衡取舍、SLA与成本）：
-> “在技术管理与云原生演进视角：
-> **从‘传统 Hive 格式’向‘Iceberg 开放表格式’升级，是大数据基础设施走向‘存算彻底分离与资产标准化’的历史必然**：
-> 过去很多企业被绑定在陈旧的 Hadoop HDFS 集群上，核心原因就是 Hive 格式在对象存储（S3/OSS）上表现极其糟糕。
-> 引入 Iceberg 之后：
-> 1. **消除了底层存储绑架**：存储层可以完全下沉到廉价、具备无限扩展能力的云原生对象存储，硬件存储成本直接削减 60% 以上；
-> 2. **消除了计算引擎绑架**：不论是离线批处理（Spark）、近实时流批（Flink）、还是交互式加速（Trino/Doris），大家读写的都是同一套标准的 Iceberg 表，消除了跨引擎数据搬迁和重复冗余存储，真正实现了企业级‘一份数据、多引擎共享’的战略蓝图。”
+选一组重算和即席查询，同时比较规划时长、存储请求与迁移成本。让多个计算引擎复用同一份表需要逐项验证 format version、更新模式与数据类型。
 
 ---
 
-### 题目2（大厂资深·存储内核）：请在白板上画出 Iceberg 的元数据树（Metadata Tree）四层拓扑结构（Catalog、Metadata File、Manifest List、Manifest File、Data File），并详细推导一次查询如何逐级剪枝？
+### 题目2（大厂资深·存储内核）：请在白板上画出 Iceberg 的元数据树（Metadata Tree）寻址路径（Catalog、Metadata File、Manifest List、Manifest File、Data File），并详细推导一次查询如何逐级剪枝？
 
 #### 简洁回答（1分钟电梯破题）：
 > “Iceberg 采用**四层树状元数据分层架构**，自顶向下分为：
@@ -473,7 +445,7 @@ flowchart TD
 >    - **第 1 步（Catalog 解析）**：读取 `v2.metadata.json`，锁定快照 `S2`；
 >    - **第 2 步（Manifest List 粗剪）**：读取 `snap-S2.avro`。发现 `manifest-1.avro` 的分区范围是 `[2026-11-01, 2026-11-10]`，与查询条件完全不重叠，**直接跳过该 Manifest 文件，无需网络 I/O 拉取**；
 >    - **第 3 步（Manifest File 细剪）**：仅拉取匹配的 `manifest-2.avro`。遍历其记录的 Data File，比对非分区列 `pay_amount` 的统计：某文件的 `pay_amount` 最大值仅为 `500.0`，直接剪枝跳过该数据文件；
->    - **第 4 步（精准物理读取）**：最终只有真正包含目标数据的几百 KB ~ 几百 MB 数据文件被实际加载，将 I/O 效率推向极致。”
+>    - **第 4 步（读取）**：引擎扫描仍可能匹配的文件，应用适用的删除文件和原始谓词。文件范围重叠时，存活的文件里可能没有最终命中的行。
 
 #### 架构师/技术管理视角（降维升华、权衡取舍、SLA与成本）：
 > “在技术架构设计层面，**‘分层元数据设计是处理海量规模复杂度的终极武器’**：
@@ -481,7 +453,7 @@ flowchart TD
 > 架构师必须看清其底层的优雅取舍：
 > 如果把所有数据文件的元数据都写在一个单一的元数据文件里，百 PB 级别下该文件将高达数 GB，每次查询加载都会把引擎内存撑爆；
 > Iceberg 将元数据分层为‘轻量级 List’与‘分块 Manifest’，**使得元数据的读取与剪枝本身也变成了分布式、可并行的微型计算**。
-> 这种架构赋予了系统近乎无限的水平扩展能力，即使单表跨越数千亿行、管理百万个物理文件，单次查询的计划编译时间依然能稳定在 **100 毫秒以内**，展现出高超的系统设计艺术。”
+> 清单可以并行读取和剪枝。规划耗时要看候选清单数、每个清单的条目数和对象存储延迟。
 
 ---
 
@@ -505,16 +477,15 @@ flowchart TD
 > 2. **冲突检测（Conflict Detection）核心算法**：
 >    - 若提交时发现当前版本已经被并发的另一事务更新为 $V_3$（对应快照 $S_{\text{other}}$）：
 >    - 触发 `commit.retry` 流程，比对 $S_{\text{other}}$ 与当前事务 $S_{\text{new}}$ 的操作类型：
->      - **场景 A（完全无冲突追加）**：若两者均为 `APPEND` 操作，且表未开启严格的排他隔离，Iceberg 自动将 $S_{\text{other}}$ 中新增的 Manifest 与自己的 Manifest 合并，重新生成元数据重试提交（用户完全无感知）；
->      - **场景 B（分区隔离更新）**：若两者虽然包含删除/更新，但通过分区统计判定两者修改的是完全不相交的两个独立分区，依然判定无冲突并自动合并提交；
->      - **场景 C（不可调和冲突）**：若两者修改了相同的物理文件或同一分区下的重叠数据，CAS 彻底判定冲突，抛出 `CommitFailedException`，并自动清理未引用的临时文件。”
+>      - 并发追加通常可以基于新的表元数据重试并复用已写文件，操作预算耗尽仍可能失败。
+>      - 覆写与行级变更还需验证所依赖的文件、谓词及并发新增的数据。仅凭两个作业写入同一分区无法判断冲突。
+>      - 若依赖的数据已变，需重新规划。提交状态不确定时先核实结果，再按安全窗口清理确认为孤儿的文件。
 
 #### 架构师/技术管理视角（降维升华、权衡取舍、SLA与成本）：
 > “在技术管理与大促保障体系中，**‘理解并发事务的边界是设计高可用数据流水线的基础门槛’**：
 > 过去很多团队在上线湖仓时，把 Iceberg 当成传统关系型数据库来用，数十个 Flink 和 Spark 作业同时对一张表执行更新，结果系统频繁报错重启。
 > 架构师必须向团队明确：**‘OCC 适用于读多写少、冲突概率低的分析型场景；若存在高频写入冲突，必须从数据流拓扑源头进行解耦’**：
-> 1. **拓扑解耦规范（SOP）**：在数据接入层严格实施‘单流写入、多流只读’规范；
-> 2. **合理配置重试参数**：针对突发的小概率冲突，调大客户端的重试上限（`commit.retry.num-retries=10`）并配置指数退避抖动，消除 99% 的瞬时并发碰撞崩溃，保障生产数据流水线的平稳运行。”
+> 按实际冲突范围限制竞争写入。给可重试的提交设退避和上限，对数据校验冲突重新规划，并记录恢复耗时。
 
 ---
 
@@ -550,12 +521,12 @@ flowchart TD
 #### 架构师/技术管理视角（降维升华、权衡取舍、SLA与成本）：
 > “在技术管理与数仓建模规范视角，**‘一个优秀的基础设施应该通过架构设计消除犯错的可能性，而不是依赖开发人员的自觉’**：
 > 过去很多公司为了防止开发人员写出全表扫描的 SQL，不得不耗费大量人力去开发各种 SQL 审计拦截系统，或者在群里天天发规范通报，收效甚微；
-> Iceberg 的隐式分区直接从底层**消灭了业务心智负担**。分析师无需关心底层是按天、按月还是按哈希分区的，写出来的标准 SQL 永远享受最极致的剪枝性能。
+> Iceberg 的隐式分区直接从底层**消灭了业务心智负担**。分析师无需关心底层是按天、按月还是按哈希分区的，按源列写谓词即可利用适用的分区规则；谓词与分区无关时仍可能全扫。
 > 同时，分区演进彻底解脱了数据架构师的‘建表恐惧症’：过去建表前要纠结一周‘到底是按天分区还是按小时分区’，生怕一旦选错后续重洗数据代价巨大；现在可以‘先按天上线，业务量翻倍后再一条 DDL 演进为按小时’，极大提升了技术团队敏捷迭代的战斗力。”
 
 ---
 
-### 题目5（生产排障·大厂高频）：在流批一体入湖场景中，生产频繁遭遇 `CommitFailedException` 冲突报错，且查询延迟随时间推移越来越慢。请分析其深层根因，并给出全链路治理方案（快照过期、小文件合并、Delete 文件压降）。
+### 题目5（生产排障推演）：在流批一体入湖场景中，生产频繁遭遇 `CommitFailedException` 冲突报错，且查询延迟随时间推移越来越慢。请分析其深层根因，并给出全链路治理方案（快照过期、小文件合并、Delete 文件压降）。
 
 #### 简洁回答（1分钟电梯破题）：
 > “生产遭遇冲突报错与查询急剧劣化的核心根因是：**多作业盲目并发写入触发 OCC 乐观锁碰撞，且缺乏自动化生命周期运维，导致元数据快照膨胀与大量碎片小文件/删除文件累积**。
@@ -567,13 +538,10 @@ flowchart TD
 #### 深入回答（技术细节展开、底层机制与推导）：
 > “故障深度排查与生产级调优全链路拆解：
 > 1. **`CommitFailedException` 根因定位与排障**：
->    - 查看日志中的详细堆栈：若是 `CommitFailedException: Cannot commit, found conflicts`，说明在当前事务写出期间，Catalog 的元数据指针已被其他事务更新；
->    - **参数治理**：
->      - 调大重试参数：设置 `commit.retry.num-retries = 10`，配置 `commit.retry.max-wait-ms = 5000`；
->      - 开启重试抖动（Exponential Jitter Backoff），避免多个作业在同一毫秒重试再次碰撞。
+>    - 查异常的原始原因。只有基线变化且操作前提仍成立时，有限次数的退避重试才有效；文件或谓词冲突需要重新规划，超时且结果未知时先确认提交状态。
 > 2. **查询长尾慢的根因（元数据膨胀与 Delete 读放大）**：
 >    - **快照膨胀**：流式写入每 1 分钟生成 1 个快照，一个月累积超过 4 万个快照。Trino/Spark 在规划查询阶段遍历元数据树需要数分钟；
->    - **Delete File 读放大**：Format V2 的 MoR 模式生成了数万个微型 Position Delete 文件，Reader 在加载数据时要反复在内存中建立高基数过滤集合，导致 CPU 饱和。
+>    - **Delete File 读放大**：Format V2 的 MoR 模式生成了数万个微型 Position Delete 文件，读取端需要加载并应用众多适用的删除记录，实际瓶颈可能在文件打开、I/O 或过滤计算。
 > 3. **全链路标准治理落地 SOP**：
 >    - **执行快照过期清理（每周执行，保留 7 天）**：
 >      ```sql
@@ -597,56 +565,28 @@ flowchart TD
 >    - **清单文件整合（Rewrite Manifests）**：
 >      ```sql
 >      CALL lakehouse_prod.system.rewrite_manifests('trade.dwd_order_fact');
->      ```”
+>      ```
 
 #### 架构师/技术管理视角（降维升华、权衡取舍、SLA与成本）：
 > “在技术管理与大促保障体系中，**‘数据湖建设切忌只重写入接入，而忽视全生命周期的常态化运维治理’**：
 > 很多团队以为把数据丢进数据湖就万事大吉了，结果 3 个月后整个湖仓由于元数据爆炸而陷入瘫痪，最终不得不花更大的代价擦屁股。
-> 我的管理方法论是**‘在数据中台构建湖仓自愈巡检机器人（Lakehouse Self-healing System）’**：
-> 1. **研发平台自动化维护管线**：在中台调度中心建立专门的‘湖仓维护队列’，每日凌晨全自动对全网 Iceberg 表执行快照清理、小文件合并与孤儿文件回收；
-> 2. **把小文件与 Delete 比例纳入 SLA 监控看板**：
->    当单表的 Delete File 数量超过阈值时，自动向业务负责人发送预警并自动降级或阻断大查询；通过工具化和自动化机制，把问题扼杀在萌芽状态，誓死保障湖仓 99.99% 的端到端服务可用性。”
+建议用维护队列隔离回灌、重写与前台查询。通过对比规划时间、候选文件数量和应用删除的开销决定维护操作；快照和孤儿清理分别安排保留窗口。
 
 ---
 
 ### 题目6（核心机制·行级更新）：深入对比 Iceberg Format V2 中的写时复制（Copy-on-Write）与读时合并（Merge-on-Read，Position Delete vs Equality Delete）。在什么场景下应该使用哪种模式？
 
-#### 简洁回答（1分钟电梯破题）：
-> “Iceberg Format V2 提供了针对行级变更的两大核心实现：
-> - **写时复制（Copy-on-Write, CoW）**：更新或删除时，**直接在写入端将涉及的原数据文件全部重写为新文件**。**写代价极高，但读端无损（零读放大）**，适合读多写少的离线批处理；
-> - **读时合并（Merge-on-Read, MoR）**：更新或删除时，**仅写入轻量的 Delete File 记录被删除的行**，由读端或后台 Compaction 执行合并。**写极快极轻量，但读端存在计算放大**，适合高频近实时流写入；
-> - **Position Delete vs Equality Delete**：Position Delete 记录确切的文件路径与行号（开销低、性能好，生产推荐）；Equality Delete 记录字段等值条件（写更灵活，但读端内存与 CPU 消耗巨大，极易引发 OOM，生产应谨慎使用）。”
+#### 简洁回答
 
-#### 深入回答（技术细节展开、底层机制与推导）：
-> “两种模式底层数据流转与 Delete 文件内部结构对比：
-> 1. **写时复制（Copy-on-Write, CoW）机制推导**：
->    - 假设一个 512MB 的 Parquet 文件中仅有 1 行数据需要更新；
->    - 引擎将该 512MB 文件全量读出，在内存中修改目标行，并将 512MB 数据整体重新压缩写出一个全新的 Parquet 文件，同时在元数据树中标记旧文件失效；
->    - **适用场景**：只读查询密集型（如高管看板、核心报表）、或者批量集中更新（如每日夜间一次性全量状态刷新）。
-> 2. **读时合并（Merge-on-Read, MoR）机制推导**：
->    - 原 512MB 文件保持不动，引擎仅写出一个包含变更指令的小文件（Delete File）；
->    - **Position Delete File 内部结构**：
->      - 存储格式依然为 Parquet，包含两列：`file_path: VARCHAR`（目标数据文件路径）与 `pos: BIGINT`（物理行号）；
->      - 读取端处理极其轻量：只需将这些行号加载入内存 RoaringBitmap，在流式扫描原数据文件时直接跳过匹配的行号；
->    - **Equality Delete File 内部结构**：
->      - 记录被删除的业务条件，如 `id = 10029384` 或 `status = 'CANCEL'`；
->      - 读取端开销极大：引擎必须将 Equality Delete 中的所有字段与值加载入内存构建完整的 Hash 表，在扫描原文件每一行时逐行比对 Hash 过滤；若 Delete 数据量大，极易导致查询端 OOM。
-> 3. **生产架构选型基准矩阵**：
->    ```sql
->    -- 针对近实时 CDC 流式入湖，强制配置为 MoR + Position Delete
->    'write.delete.mode' = 'merge-on-read',
->    'write.update.mode' = 'merge-on-read'
->    ```”
+CoW 直接重写受影响的数据文件。MoR 保留原文件，把删除信息单独记录，由读取端应用；更新还会新增改后的行。稀疏更新越多，CoW 的写放大越值得关注；查询越频繁，MoR 的读放大越值得关注。
 
-#### 架构师/技术管理视角（降维升华、权衡取舍、SLA与成本）：
-> “在技术管理与方案评审中：
-> **‘CoW 与 MoR 的选择，本质上是企业业务形态在“写入吞吐”与“查询时效”之间的战略博弈’**：
-> 很多技术团队由于没有理解两者差异，盲目将所有表设为 MoR，结果实时入湖看似跑得很欢，但下游查询业务方天天投诉‘报表太慢’；
-> 反之，有的团队盲目选择 CoW，导致每分钟几条数据的更新引发数 TB 文件的反复重写，直接把 S3 存储账单刷爆。
-> 架构师的决策规则是：
-> 1. **分层治理原则**：在 ODS/DWD 接入层，业务主要是吞吐优先，采用 **MoR 模式** 配合高频微批摄入；
-> 2. **汇总层与应用层反哺**：在 DWS 汇总层与面向报表的 ADS 层，采用 **CoW 模式**，或者通过夜间定时 Compaction 将 MoR 状态‘固化转换为物理纯净大文件’；
-> 动态平衡全链路计算与存储成本，实现整体架构的最优解。”
+#### 深入回答
+
+某个 512 MiB 文件有一行订单状态变更。CoW 要生成包含正确行的新数据文件并原子替换旧引用，旧快照仍可引用旧文件。MoR 可追加新行，用删除记录屏蔽旧行。Position Delete 用数据文件路径和从零开始的行位置表示删除；Equality Delete 包含所声明字段的值，读者按分区、序列号等适用条件过滤数据。后者允许写者只知道业务键。配置 Spark 的写模式不等于能任意为所有引擎指定删除表示。[Iceberg 表格式规范](https://iceberg.apache.org/spec/) · [Flink upsert](https://iceberg.apache.org/docs/latest/flink-writes/)
+
+#### 架构师/技术管理视角
+
+先列出更新密度、查询频率和允许的数据可见延迟，确认所有读引擎能读取实际生成的删除文件，再比较重写的字节、读取删除文件的耗时和维护成本。对更新密集的时间窗口单独调度重写，避免与实时写入争抢资源。
 
 ---
 
@@ -657,7 +597,7 @@ flowchart TD
 > 1. **统一存储与开放格式**：底层基于云原生对象存储，全面以 **Apache Iceberg Format V2 (Parquet+ZSTD)** 作为全企业唯一主数据格式；
 > 2. **统一解耦的 REST Catalog**：以高可用 **Iceberg REST Catalog** 替代传统 HMS，向下纳管异构对象存储，向上打通 Spark（离线批量）、Trino（即席交互）与 Doris（实时报表）；
 > 3. **存算分离与多租户分级**：计算资源池容器化（K8s），根据业务 SLA 划分 P0 生产池与 P1 弹性分析池；
-> 4. **全生命周期自治治理**：结合自研巡检平台每日自动执行小文件合并与快照过期，存储成本下降 60%，端到端时效提升至分钟级。”
+> 4. **维护与成本**：分别记录重写字节、保留的历史数据、存储请求和计算支出，按实际负载评估收益。
 
 #### 深入回答（技术方案、拓扑推导与权衡）：
 > “企业级全景架构拆解为四大核心支柱体系：
@@ -673,25 +613,64 @@ flowchart TD
 >      - **Apache Doris**：通过 Multi-Catalog 直接挂载 Iceberg 湖仓外表，利用 Doris 的全链路向量化与本地缓存（File Cache）进行大屏即席加速。
 > 3. **智能冷热分级与跨云成本优化（Storage Tiering & Cost ROI）**：
 >    - **热数据层（Hot Tier, 0~30天）**：保留在标准对象存储，开启高频访问策略；
->    - **冷数据层（Cold Tier, > 90天）**：通过对象存储生命周期规则自动沉降至低频访问或归档存储（Archive Storage），存储单价直接下降 75%；
->    - **元数据极简归档**：快照保留严格限制为 7 天，历史快照过期后物理碎片文件自动由垃圾回收器（GC Worker）安全清理，消灭无主幽灵文件。
+>    - 冷存储要验证在线读取和恢复时延，归档层不一定能直接用于查询。按快照引用、审计与恢复窗口再清理历史数据，另用孤儿清理回收残留文件。
 > 4. **自动化运维中台与多租户 SLA 保障（Governance & SLA）**：
 >    - 研发数据中台资产化看板，量化展示每张 Iceberg 表的快照数、小文件数与 Delete File 比例；
 >    - 设定自动化自愈任务：一旦检测到小文件占比超过 20%，系统在夜间调度队列中自动启动 Spark 重写合并作业；
 >    - 平台级权限由 Apache Ranger 统一鉴权管控，实现统一的列级脱敏与行级过滤。”
 
 #### 架构师/技术管理视角（商业价值、领导力与落地抓手）：
-> “在技术管理与产品化交付层面（结合我在瑞纳智能主导企业级数据中台与太原项目验收的真实经验）：
-> **‘架构师的核心价值是用先进的技术标准消除系统熵增，为企业换取确定性的商业回报’**：
-> 第一，**打破跨系统的数据搬迁壁垒**。过去离线数仓在 Hive，实时查询在 ClickHouse，数据在多个系统之间通过 ETL 频繁搬移，不仅产生大量的重复存储浪费，还经常因为同步延迟导致数据口径打架。统一收敛至 Iceberg 湖仓一体后，所有引擎共享底层同一份事实表，彻底消除了数据冗余与口径歧义；
-> 第二，**商业 ROI 结果导向**。在太原大型数据中台项目交付中，面对海量设备时序与明细报表，通过引入这套基于 Iceberg + 对象存储的存算分离架构，我们在数据体量年增 3 倍的情况下，将客户底层物理硬件采购成本降低了 50% 以上，一次性高分通过了专家评审验收；
-> 第三，**技术战略前瞻性**。将数据格式标准化为行业开放标准（Iceberg），确保了企业未来 5~10 年无论如何更换上层计算引擎（从 Spark 到未来更新的引擎），底层的数据资产始终具备完全的独立性与流动性，展现出技术决策的高维战略定力。”
+在试点表上回放批量更正、实时入湖和历史重算，用相同时间窗口核对每月存储、对象请求、计算与值班成本。将保留期、跨区域访问和新引擎兼容测试写进验收标准，确认能复现业务结果后再扩大迁移范围。
+
+---
+
+### 9.8 面试现场自然口述示范与一页纸速记卡（Day 12 复盘精华）
+
+> **口述目标定位**：在技术总监与资深数据架构师面试中，面试官考察现代开放数据湖表格式时，重点聚焦于 **系统底层四层元数据树组织与剪枝机制、云原生对象存储 Listing 消除原理、OCC 乐观并发控制与快照隔离、Format V2 行级更新性能与读放大治理、以及百 PB 级湖仓存算分离与 REST Catalog 统一演进** 的深度设计哲学与管理落地把控力。
+
+---
+
+#### 口述练习
+
+1. 画出表名到数据文件的读取路径。分别指出分区范围、列统计和原始行谓词在哪一步生效。
+2. 推演两个追加作业同时提交，再把其中一个改为重写旧文件。说明什么情况下可以重试，什么情况下必须重新规划。
+3. 比较 Position Delete 和 Equality Delete 对写、读两端信息的要求，为读密集和持续变更的表分别设计维护计划。
+
+---
+
+#### Day 12 一页纸速记卡（5 大黄金法则）
+
+```text
+====================================================================================================
+                        Apache Iceberg 架构与数据湖存储内核 一页纸速记卡 (Day 12)
+====================================================================================================
+1. 四层元数据树消灭 Listing 瓶颈
+   - 树状拓扑：Catalog 指针 -> Metadata File 快照列表 -> Manifest List 分区范围 -> Manifest File 列统计。
+   - 剪枝：跳过无关清单或文件，规划成本随候选条目数、统计质量及读取开销变化。
+----------------------------------------------------------------------------------------------------
+2. OCC 乐观锁与 CAS 原子提交
+   - 事务模型：读写互不阻塞，本地生成新分支，最终在 Catalog 执行 CAS 指针替换更新快照。
+   - 冲突检测：新版本上验证操作前提，校验通过可重试，输入文件已被替换时重新规划。
+----------------------------------------------------------------------------------------------------
+3. 隐式分区与分区演进彻底解脱
+   - 隐式分区：SQL 无需写人工分区列，直接用原始时间字段，引擎自动做时间维度映射与下推剪枝。
+   - 分区演进：调整分区无需全量重新洗数，新老分区规则并存，各自独立应用对应的剪枝逻辑。
+----------------------------------------------------------------------------------------------------
+4. Format V2 行级更新与读放大权衡
+   - CoW 重写受影响的数据文件，降低后续读取时合并删除的成本。
+   - MoR 可用删除文件表达变更，更新还要写新行；选择删除类型取决于写入者掌握的信息与读引擎支持。
+----------------------------------------------------------------------------------------------------
+5. 湖仓全生命周期三步自愈治理
+   - expire_snapshots 移除过期快照，可回收不再被保留快照引用的文件；remove_orphan_files 处理遗留的未引用文件。
+   - rewrite_manifests 整理清单；rewrite_data_files 按策略重写选定数据文件，收益通过实测验证。
+====================================================================================================
+```
 
 ---
 
 ## 10. 知识自检与口述推演清单
 
-- [ ] **白板手绘架构推演能力**：能否脱稿在白板上画出 Iceberg 四层元数据树（Catalog、Metadata File、Manifest List、Manifest File、Data File），并向架构评审委员会推导完整的查询两级剪枝时序？
+- [ ] **白板手绘架构推演能力**：能否脱稿在白板上画出 Iceberg 从 Catalog 经元数据文件、清单列表和清单找到数据文件的路径，并向架构评审委员会推导完整的查询两级剪枝时序？
 - [ ] **OCC 并发提交机制推演**：能否系统讲清多个作业并发写入时，Iceberg 如何基于 CAS 原子操作实现乐观并发控制，以及在遭遇版本冲突时底层如何检测并进行自动重试？
 - [ ] **关键特性本质口述**：能否向业务团队讲透“隐式分区”与“分区演进”的核心区别，并说明它为什么能彻底消灭传统 Hive 数仓因缺少分区过滤引发的全表扫描事故？
 - [ ] **生产排障实战表达**：面对生产中“流批并发导致 CommitFailedException 频繁报错、查询 P99 延迟暴涨数十倍”的紧急事故，能否在 1 分钟内口述出包括快照过期、Position Delete 合并与参数调优的全链路治理招式？
@@ -717,6 +696,6 @@ graph LR
 
 1. **Apache Iceberg 官方最新文档与物理格式规范**：[Apache Iceberg Official Documentation](https://iceberg.apache.org/docs/latest/)
 2. **Iceberg Format V2 官方表格式设计规范**：[Iceberg Table Spec (Format V2)](https://iceberg.apache.org/spec/)
-3. **Netflix 官方技术博客（Iceberg 架构起源）**：[Iceberg: A Functional Table Format for Big Data](https://netflixtechblog.com/)
-4. **Apache Iceberg REST Catalog 协议规范**：[Iceberg REST OpenAPI Specification](https://github.com/apache/iceberg/blob/main/open-api/rest-catalog-open-api.yaml)
+3. **并发写入与冲突验证**：[Apache Iceberg Reliability](https://iceberg.apache.org/docs/latest/reliability/)
+4. **Apache Iceberg REST Catalog 协议规范**：[Iceberg REST OpenAPI Specification](https://iceberg.apache.org/rest-catalog-spec/)
 5. **VLDB 顶会经典工业界论文**：Armbrust, M., et al. (2020). *Lakehouse: A New Generation of Open Platforms that Unify Data Warehousing and Advanced Analytics*. CIDR.
