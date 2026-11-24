@@ -98,35 +98,19 @@ public class CustomPunctuatedWatermarkJob {
     /**
      * 自定义标点与周期混合型 WatermarkGenerator
      */
-    public static class PunctuatedOrderWatermarkGenerator implements WatermarkGenerator<OrderEvent> {
-
-        private long maxTimestamp = Long.MIN_VALUE;
-        private final long outOfOrdernessMillis = 3000L; // 容忍 3 秒乱序
-
-        /**
-         * 每到达一个事件被调用一次。
-         * 如果是 VIP 用户订单，立即下发标点符号式 Watermark，加速关键下游窗口触发！
-         */
-        @Override
-        public void onEvent(OrderEvent event, long eventTimestamp, WatermarkOutput output) {
-            maxTimestamp = Math.max(maxTimestamp, eventTimestamp);
-
-            // 标点符号式触发条件：若为 VIP 订单，立即发射 Watermark
-            if (event.getUserId() != null && event.getUserId().startsWith("VIP-")) {
-                long punctuatedWatermark = eventTimestamp - outOfOrdernessMillis;
-                output.emitWatermark(new Watermark(punctuatedWatermark));
-                LOG.info(">>> [Punctuated Watermark Emitted] VIP order {} triggered WM: {}", 
-                        event.getOrderId(), punctuatedWatermark);
-            }
+    public static class PunctuatedOrderWatermarkGenerator extends BoundedOutOfOrdernessWatermarks<OrderEvent> {
+        public PunctuatedOrderWatermarkGenerator() {
+            super(Duration.ofSeconds(3));
         }
 
-        /**
-         * 框架按配置周期性回调 (默认每 200ms)
-         */
         @Override
-        public void onPeriodicEmit(WatermarkOutput output) {
-            long currentWatermark = maxTimestamp - outOfOrdernessMillis;
-            output.emitWatermark(new Watermark(currentWatermark));
+        public void onEvent(OrderEvent event, long eventTimestamp, WatermarkOutput output) {
+            super.onEvent(event, eventTimestamp, output);
+            // VIP 只触发一次提前发送，仍沿用本分区的最大时间戳和三秒乱序边界。
+            if (event.getUserId() != null && event.getUserId().startsWith("VIP-")) {
+                onPeriodicEmit(output);
+                LOG.debug("VIP order {} triggered watermark emission", event.getOrderId());
+            }
         }
     }
 }

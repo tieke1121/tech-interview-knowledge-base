@@ -4,12 +4,14 @@ import com.tech.interview.flink.function.OrderPaymentCoProcessFunction;
 import com.tech.interview.flink.model.OrderEvent;
 import com.tech.interview.flink.model.PaymentEvent;
 import com.tech.interview.flink.model.ReconcileResult;
-import org.apache.flink.streaming.api.functions.co.KeyedCoProcessFunction;
+import org.apache.flink.api.common.eventtime.WatermarkStrategy;
+import org.apache.flink.api.common.typeinfo.TypeInformation;
+import org.apache.flink.streaming.api.environment.StreamExecutionEnvironment;
+import org.apache.flink.streaming.api.functions.ProcessFunction;
 import org.apache.flink.util.Collector;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 
-import java.util.ArrayList;
 import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -20,6 +22,33 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  * 双流连接、Watermark 协同与事件时间定时器对账单元测试
  */
 class DualStreamReconciliationJobTest {
+
+    @Test
+    @DisplayName("同一订单更新后只在新的事件时间截止点输出超时")
+    void replacementOrderExpiresAtItsOwnDeadline() throws Exception {
+        var env = StreamExecutionEnvironment.getExecutionEnvironment();
+        env.setParallelism(1);
+        var orders = env.fromData(
+                new OrderEvent("A", "buyer", 100, 1_000),
+                new OrderEvent("A", "buyer", 80, 5_000))
+                .assignTimestampsAndWatermarks(WatermarkStrategy.<OrderEvent>forMonotonousTimestamps()
+                        .withTimestampAssigner((order, previous) -> order.getEventTime()));
+        var payments = env.fromCollection(List.of(), TypeInformation.of(PaymentEvent.class));
+        var timeouts = orders.connect(payments)
+                .keyBy(OrderEvent::getOrderId, PaymentEvent::getOrderId)
+                .process(new OrderPaymentCoProcessFunction(10_000))
+                .getSideOutput(OrderPaymentCoProcessFunction.TIMEOUT_ORDER_TAG)
+                .process(new TimeoutTimestamp());
+
+        assertEquals(List.of(15_000L), timeouts.executeAndCollect(2));
+    }
+
+    private static class TimeoutTimestamp extends ProcessFunction<OrderEvent, Long> {
+        @Override
+        public void processElement(OrderEvent event, Context ctx, Collector<Long> out) {
+            out.collect(ctx.timestamp());
+        }
+    }
 
     @Test
     @DisplayName("验证 ReconcileResult 实体模型与字段计算")

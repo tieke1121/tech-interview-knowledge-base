@@ -18,6 +18,10 @@
     <name>Java High Concurrency &amp; Distributed Lock Demo</name>
     <description>Java 17 JUC 动态监控线程池、CompletableFuture 异步编排与 Redisson 分布式锁实战</description>
 
+    <properties>
+        <spring.version>6.2.19</spring.version>
+    </properties>
+
     <dependencies>
         <!-- Redisson 分布式锁与缓存 -->
         <dependency>
@@ -44,6 +48,26 @@
             <groupId>org.apache.logging.log4j</groupId>
             <artifactId>log4j-core</artifactId>
             <scope>runtime</scope>
+        </dependency>
+
+        <!-- 事务边界实验使用真实 Spring 代理和进程内 H2。 -->
+        <dependency>
+            <groupId>org.springframework</groupId>
+            <artifactId>spring-context</artifactId>
+            <version>${spring.version}</version>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
+            <groupId>org.springframework</groupId>
+            <artifactId>spring-jdbc</artifactId>
+            <version>${spring.version}</version>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
+            <groupId>com.h2database</groupId>
+            <artifactId>h2</artifactId>
+            <version>2.4.240</version>
+            <scope>test</scope>
         </dependency>
 
         <!-- Test -->

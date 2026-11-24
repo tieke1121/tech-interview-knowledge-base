@@ -100,30 +100,21 @@ flink-yarn-demo/
 ## 三、Source 端、计算端、Sink 端 核心机制与底层哲学
 
 ### 1. 【Source 端】Watermark 推进与分区拓扑
-- **标点式（Punctuated）vs 周期性（Periodic）**：
-  - 周期性依赖 `pipeline.auto-watermark-interval`（默认 200ms）在 `onPeriodicEmit` 触发；
-  - 标点式在特定业务关键事件到达（如高优 VIP 订单、批次结束标记）时在 `onEvent` 中立即调用 `output.emitWatermark()`，实现毫秒级触发下游关键窗口计算；
-- **空闲分区防挂起（`withIdleness`）**：
-  - 下游多通道对齐遵循 $\min(W_1, W_2, ...)$。若某分区夜间无数据，下游 Watermark 彻底被锁死。配置 `withIdleness(Duration)` 让 Flink 自动忽略空闲分区；
-- **7 种物理分区语义与网络开销**：
-  - `rebalance()`：跨机器全局轮询（Round-Robin），消除倾斜但网络开销高；
-  - `rescale()`：本地 Slot 内部轮询，避免跨机器 Shuffle，网络开销极低；
-  - `forward()`：严格 1:1 本地直连，零序列化与零跨网络开销；
-  - `partitionCustom()`：按特定租户或业务分流定制隔离。
+
+- **什么时候关闭窗口？** 示例容忍三秒乱序。若分区见过的最大事件时间为 20,000 毫秒，周期发送与 VIP 触发发送都得到 16,999 毫秒。时间戳为 17,000 的记录仍在容忍范围内。下游取活跃输入的最小水位线，全部活跃输入都跨过窗口末端时才触发默认事件时间窗口。持续空闲的输入可以用 `withIdleness` 标记。[Flink 水位线文档](https://nightlies.apache.org/flink/flink-docs-release-1.20/docs/dev/datastream/event-time/generating_watermarks/)
+- **改分区会怎样影响网络？** `rebalance()` 把记录轮询给全部下游子任务，`rescale()` 轮询分配给相应的下游子集，`forward()` 要求相同并行度并一对一转发。子任务实际放在哪台机器、能否组成算子链，决定是否跨网络及序列化开销。若后续按业务键聚合，单一热键仍可能集中在一个子任务。[Flink 物理分区](https://nightlies.apache.org/flink/flink-docs-release-1.20/docs/dev/datastream/operators/overview/#physical-partitioning)
 
 ---
 
 ### 2. 【计算端】状态治理、时序调度与复杂计算
 - **广播状态模式（Broadcast State Pattern）**：
   - 低频控制规则流调用 `.broadcast(MapStateDescriptor)` 转化为广播流；
-  - 业务流在 `processElement` 中只读读取 `ReadOnlyBroadcastState`，控制流在 `processBroadcastElement` 中独占写入，实现**毫秒级规则热加载且零停机**；
-- **原生状态类型避坑指南**：
-  - 严禁滥用 `ValueState<Map>`，否则单 Key 修改会引发全量反序列化与网络/磁盘风暴；
-  - 必须采用 `MapState<UK, UV>`，底层直接映射到 RocksDB 的单个 Column Family Key，点查点写性能高出百倍；
-  - 算子状态恢复：`ListState` 均分恢复，`UnionListState` 广播恢复（Kafka 消费位点恢复核心机制）；
+  - 业务流在 `processElement` 中只读规则，广播侧在 `processBroadcastElement` 中更新各并行实例的本地副本。规则与业务事件的到达顺序可能不同；严格的切换时刻需要在记录中约定规则版本。
+- **怎样选择状态结构？** 对同一业务键下的大集合，如果常常只改一个条目，`MapState` 提供逐项访问。在 RocksDB 后端，使用 `ValueState<Map>` 更新整张映射会引入额外序列化。若集合很小且总是整体读写，可直接使用 `ValueState`。扩缩容时，算子列表状态的元素可以重新分摊，union 列表状态则给每个新子任务完整列表。[Flink 状态文档](https://nightlies.apache.org/flink/flink-docs-release-1.20/docs/dev/datastream/fault-tolerance/state/)
+- **订单更新后何时超时？** 双流对账示例给每个订单号保留最后到达的单边记录。订单事件时间先为第 1 秒、后为第 5 秒，等待期为 10 秒。第二条记录会撤销第 11 秒的旧定时器，水位线推进到第 15 秒仍无支付才输出超时。业务若要求“首单起算”或按版本拒绝旧订单，需要单独定义规则。[可运行回归用例](src/test/java/com/tech/interview/flink/DualStreamReconciliationJobTest.java)
 - **异步 I/O（Async I/O）与本地缓存防击穿**：
   - 杜绝在 `map()` 中使用同步阻塞 RPC；
-  - 使用 `AsyncDataStream.unorderedWait()` 消除队头阻塞（Head-of-Line Blocking）；
+  - 使用 `AsyncDataStream.unorderedWait()` 时，同一水位区间内已完成的请求可先返回。待完成记录仍会阻碍水位线向下游传递。
   - 算子内嵌 `LocalTtlCache`（堆内高并发 LRU + TTL），防击穿外部 Redis/HBase，配合 `timeout()` 优雅兜底降级；
 - **复杂事件处理（Flink CEP）**：
   - 采用非确定有限状态自动机（NFA），利用 `SharedBuffer` 共享状态树避免笛卡尔积状态膨胀；

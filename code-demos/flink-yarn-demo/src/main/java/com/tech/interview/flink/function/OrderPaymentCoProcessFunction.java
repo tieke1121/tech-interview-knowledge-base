@@ -7,6 +7,7 @@ import org.apache.flink.api.common.state.StateTtlConfig;
 import org.apache.flink.api.common.state.ValueState;
 import org.apache.flink.api.common.state.ValueStateDescriptor;
 import org.apache.flink.configuration.Configuration;
+import org.apache.flink.streaming.api.TimerService;
 import org.apache.flink.streaming.api.functions.co.KeyedCoProcessFunction;
 import org.apache.flink.util.Collector;
 import org.apache.flink.util.OutputTag;
@@ -61,7 +62,7 @@ public class OrderPaymentCoProcessFunction
     public void open(Configuration parameters) throws Exception {
         super.open(parameters);
 
-        // 配置 State TTL：生产必备防泄漏规范，保障即便机器极端断电重启也能兜底清理
+        // 两小时处理时间 TTL 限制单边状态的保留期。事件时间超时通知由定时器产生。
         StateTtlConfig ttlConfig = StateTtlConfig
                 .newBuilder(Duration.ofHours(2))
                 .setUpdateType(StateTtlConfig.UpdateType.OnCreateAndWrite)
@@ -117,7 +118,7 @@ public class OrderPaymentCoProcessFunction
 
             // 清理状态，释放内存
             clearAllState();
-            LOG.info("[对账成功] 订单先来后到完成对账: orderId={}, 耗时={}ms", orderId, duration);
+            LOG.info("[对账成功] 订单到达，与先前的支付匹配: orderId={}, 耗时={}ms", orderId, duration);
 
         } else {
             // 场景 B：订单先到，支付尚未到达 -> 暂存订单，并注册事件时间超时定时器
@@ -125,8 +126,7 @@ public class OrderPaymentCoProcessFunction
 
             // 定时器触发点：以事件时间为基准，推进至 orderTime + timeoutMs 时触发
             long timerTs = order.getEventTime() + timeoutMs;
-            ctx.timerService().registerEventTimeTimer(timerTs);
-            timerTimestampState.update(timerTs);
+            replaceTimeout(ctx.timerService(), timerTs);
 
             LOG.debug("[订单暂存] 注册对账定时器: orderId={}, 触发时间戳={}", orderId, timerTs);
         }
@@ -174,8 +174,7 @@ public class OrderPaymentCoProcessFunction
             paymentState.update(payment);
 
             long timerTs = payment.getPayTime() + timeoutMs;
-            ctx.timerService().registerEventTimeTimer(timerTs);
-            timerTimestampState.update(timerTs);
+            replaceTimeout(ctx.timerService(), timerTs);
 
             LOG.warn("[支付先行到达] 暂存等待订单到达: orderId={}, 支付Id={}", orderId, payment.getPaymentId());
         }
@@ -190,6 +189,10 @@ public class OrderPaymentCoProcessFunction
             OnTimerContext ctx, 
             Collector<ReconcileResult> out) throws Exception {
 
+        // 旧版本的快照可能还保存着同一订单已经被替换的定时器。
+        if (!Long.valueOf(timestamp).equals(timerTimestampState.value())) {
+            return;
+        }
         String orderId = ctx.getCurrentKey();
         OrderEvent order = orderState.value();
         PaymentEvent payment = paymentState.value();
@@ -208,6 +211,15 @@ public class OrderPaymentCoProcessFunction
 
         // 定时器生命周期终结，彻底清理状态
         clearAllState();
+    }
+
+    private void replaceTimeout(TimerService timerService, long nextTimestamp) throws Exception {
+        Long previous = timerTimestampState.value();
+        if (previous != null) {
+            timerService.deleteEventTimeTimer(previous);
+        }
+        timerService.registerEventTimeTimer(nextTimestamp);
+        timerTimestampState.update(nextTimestamp);
     }
 
     private void clearAllState() throws Exception {

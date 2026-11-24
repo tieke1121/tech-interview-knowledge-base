@@ -154,6 +154,8 @@ Watermark 表达输入对事件时间进度的估计。窗口用它决定何时�
 - [ ] 画两条输入的屏障顺序，指出恢复点处的订单总额。
 - [ ] 给定一个写慢的 Sink，指出加并发前先验证哪两个指标。
 
+**核对一个边界值。** 对本仓的毫秒级 DataStream 有界乱序策略，某分区最大事件时间为 20,000 ms、允许乱序 3,000 ms，对应的水位是 16,999 ms。时间戳恰好为 17,000 ms 的事件仍落在允许范围。示例中的 VIP 事件只影响何时发送水位，同一分区的水位保持单调。[可运行测试](../code-demos/flink-yarn-demo/src/test/java/com/tech/interview/flink/PunctuatedWatermarkTest.java) · [Flink 水位生成](https://nightlies.apache.org/flink/flink-docs-release-1.20/docs/dev/datastream/event-time/generating_watermarks/)
+
 ## 11. 知识脉络与技术图谱关联
 
 结合[状态与检查点](../01-bigdata/01-flink/02-flink-state-checkpoint.md)、[反压与水位线](../01-bigdata/01-flink/03-flink-backpressure-watermark.md)和[双流对账示例](../code-demos/flink-yarn-demo/README.md)演练。下一步把 Kafka Sink 换成湖表，回答下游何时能看到已提交的变更。[Paimon 面试题](./02-paimon.md)

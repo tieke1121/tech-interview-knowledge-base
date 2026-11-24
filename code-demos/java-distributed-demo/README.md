@@ -5,6 +5,10 @@
 
 ---
 
+## Spring 事务边界实验
+
+从仓库根目录执行 `mvn -f code-demos/java-distributed-demo/pom.xml -Dtest=SpringTransactionBoundaryTest test`。四个用例使用 Spring 6.2.19 和进程内 H2，比较自调用、代理调用与跨线程调用。先预测订单和审计各留下几行，再核对[六道 Spring 面试题中的结果表](../../08-interview-questions/06-spring.md)。
+
 ## 一、业务场景与架构设计
 
 在千亿级实时数据网关与微服务核心账务中，**高并发请求编排与分布式互斥**是系统设计的核心命脉：

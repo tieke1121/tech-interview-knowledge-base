@@ -170,6 +170,15 @@ sequenceDiagram
 - [ ] 给出一个构造注入循环，解释哪一步无法完成。
 - [ ] 分别预测“外层回滚、内层自调用”和“外层回滚、内层经独立事务提交”后两张表的结果。
 
+**用数据库核对 Q5 和 Q6。** 四次实验都先写一笔订单、再写审计，最后让订单抛出同一个异常。每次换一个新数据库，退出事务后再读表。以下为 Spring Framework 6.2.19、单数据源 JDBC、默认代理模式的结果。[可运行测试](../code-demos/java-distributed-demo/src/test/java/com/tech/interview/distributed/SpringTransactionBoundaryTest.java)
+
+| 审计方法的调用路径 | 订单行 | 审计行 | 原因 |
+| --- | ---: | ---: | --- |
+| 外层直接调用自身的 `REQUIRES_NEW` | 0 | 0 | 没有经过内层拦截器，两个写操作都由外层回滚。 |
+| 同线程经代理调用 `REQUIRES_NEW` | 0 | 1 | 独立事务在外层失败前已提交。 |
+| 同线程经代理调用 `REQUIRED` | 0 | 0 | 审计加入已有事务。 |
+| 工作线程经代理调用 `REQUIRED` | 0 | 1 | 工作线程建立自己的事务。示例等待它提交后才让外层失败。 |
+
 ## 11. 知识脉络与技术图谱关联
 
 代理与类加载器影响类型身份，线程模型决定事务资源可见范围。把框架调用图与这两个专题一起复习。[JVM 六题](./05-jvm.md) · [Java 并发与线程池](../03-java-engineering/02-concurrency-juc.md)
