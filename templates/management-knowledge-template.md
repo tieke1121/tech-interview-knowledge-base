@@ -3,7 +3,8 @@ id: "mgmt-topic-name"
 title: "管理主题（如：研发效能提升与绩效管理）"
 module: "04-tech-management" # 或 05-project-management
 category: "team-performance"
-status: "未学习" # 未学习 | 学习中 | 需要巩固 | 已掌握
+doc_status: "草稿" # 草稿 | 编写中 | 已完成
+learning_status: "未学习" # 未学习 | 学习中 | 需要巩固 | 已掌握
 importance: "P0" # P0: 核心必考 | P1: 重要高频 | P2: 扩展了解
 last_reviewed: "2026-11-16"
 tags: ["团队管理", "绩效考核", "研发效能", "敏捷交付"]

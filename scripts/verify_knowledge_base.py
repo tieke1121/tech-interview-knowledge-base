@@ -16,7 +16,6 @@
    - 验证是否按规范挂载案例隔离声明或待核实标记（PROFILE_FACTS.md）
 """
 
-import os
 import re
 import sys
 from pathlib import Path
@@ -124,37 +123,43 @@ def verify_structural_quality(file_path: Path, content: str, fm: dict, is_tech_m
             
     # 检查双状态机制
     doc_st = fm.get("doc_status")
-    if doc_st and doc_st not in VALID_DOC_STATUSES:
+    if doc_st not in VALID_DOC_STATUSES:
         errors.append(f"非法文档编写状态: '{doc_st}' (允许: {VALID_DOC_STATUSES})")
         
-    learn_st = fm.get("learning_status", fm.get("status"))
-    if learn_st and learn_st not in VALID_LEARNING_STATUSES:
+    learn_st = fm.get("learning_status")
+    if learn_st not in VALID_LEARNING_STATUSES:
         errors.append(f"非法学习进度状态: '{learn_st}' (允许: {VALID_LEARNING_STATUSES})")
         
     # 如果是技术知识点文档，检查 12 大段落规范
     if is_tech_module:
         for sec in REQUIRED_TECH_SECTIONS:
-            sec_pattern = re.escape(sec.split(" ")[0]) + r"\s*" + re.escape(sec.split(" ", 1)[1])
-            if not re.search(sec_pattern, content):
+            if not re.search(r"^##[ \t]+" + re.escape(sec), content, re.MULTILINE):
                 errors.append(f"缺少核心规范段落: '{sec}'")
-                
-        # 深度检查真题与参考答案对应性
-        sec8_match = re.search(r"## 8\.\s*互联网大厂高频面试真题库(.*?)(?=## 9\.|$)", content, re.DOTALL)
-        sec9_match = re.search(r"## 9\.\s*结构化深度参考答案(.*?)(?=## 10\.|$)", content, re.DOTALL)
-        
-        if sec8_match and sec9_match:
-            sec8_text = sec8_match.group(1)
-            sec9_text = sec9_match.group(1)
-            
-            q_list = re.findall(r"\*\*Q(\d+)\*\*", sec8_text)
-            ans_list = re.findall(r"###\s*题目(\d+)", sec9_text)
-            
-            if len(q_list) > 0 and len(ans_list) < len(q_list):
-                errors.append(f"真题答案覆盖不全: 第8节列出 {len(q_list)} 道真题，但第9节仅解答了 {len(ans_list)} 道 (必须题题有解)")
-                
-            if "#### 简洁回答" not in sec9_text or "#### 深入回答" not in sec9_text:
-                errors.append("第9节答案缺少标准三层回答结构 (必须包含简洁回答、深入回答与架构师视角)")
-                
+
+        sections = re.split(r"^##[ \t]+", content, flags=re.MULTILINE)
+        questions = next((s for s in sections if s.startswith(REQUIRED_TECH_SECTIONS[7])), "")
+        answers = next((s for s in sections if s.startswith(REQUIRED_TECH_SECTIONS[8])), "")
+        # 兼容 “**Q1**” 和 “**Q1 [题型]**” 两种现有编号。
+        question_ids = re.findall(r"^[ \t]*(?:(?:\d+\.|[-*])[ \t]+)?\*\*Q(\d+)\b", questions, re.MULTILINE)
+        if not 6 <= len(question_ids) <= 8 or len(set(question_ids)) != len(question_ids):
+            errors.append("第8节应列出 6 至 8 道编号唯一的题目")
+
+        answer_ids = []
+        for block in re.split(r"^###[ \t]+", answers, flags=re.MULTILINE)[1:]:
+            heading = re.match(r"题目[ \t]*(\d+)", block)
+            if not heading:
+                continue
+            number = heading.group(1)
+            answer_ids.append(number)
+            layers = re.split(r"^####[ \t]+", block, flags=re.MULTILINE)[1:]
+            for prefixes in [("简洁回答",), ("深入回答",), ("架构师", "技术管理视角")]:
+                if not any(layer.startswith(prefixes) and layer.partition("\n")[2].strip().strip("-").strip()
+                           for layer in layers):
+                    errors.append(f"第9节题目{number}缺少“{prefixes[0]}”层的标题或正文")
+
+        if sorted(question_ids) != sorted(answer_ids):
+            errors.append(f"题号与答案不一一对应: 提问 {question_ids}，解答 {answer_ids}")
+
     # 如果是 AI 数据工程核心专题文档 (01~08)，校验用户指定的 12 大段落规范
     if "10-ai-data-engineering" in str(file_path) and re.match(r"^0[1-8]-", file_path.name):
         for sec in REQUIRED_AI_DATA_SECTIONS:
@@ -196,6 +201,7 @@ def main():
         "05-project-management",
         "06-ai-agent",
         "07-project-review",
+        "08-interview-questions",
         "09-review",
         "10-ai-data-engineering",
     ]
@@ -208,14 +214,15 @@ def main():
     path_link_errors = []
     fact_advisories = []
 
-    # 扫描根目录关键 Markdown
-    root_mds = [ROOT_DIR / "README.md", ROOT_DIR / "PLAN.md", ROOT_DIR / "PROGRESS.md", ROOT_DIR / "PROFILE_FACTS.md", ROOT_DIR / "AGENTS.md"]
-    for r_md in root_mds:
-        if r_md.exists():
-            content = r_md.read_text(encoding="utf-8")
-            p_errs = check_path_and_links(r_md, content)
-            if p_errs:
-                path_link_errors.append((str(r_md.name), p_errs))
+    # 导航与示例说明只检查路径，不要求知识卡片元数据。
+    guides = [ROOT_DIR / name for name in ("README.md", "PLAN.md", "PROGRESS.md", "PROFILE_FACTS.md", "AGENTS.md")]
+    guides.append(ROOT_DIR / "code-demos" / "README.md")
+    guides.extend((ROOT_DIR / "code-demos").glob("*/README.md"))
+    for guide in guides:
+        if guide.is_file():
+            errors = check_path_and_links(guide, guide.read_text(encoding="utf-8"))
+            if errors:
+                path_link_errors.append((str(guide.relative_to(ROOT_DIR)), errors))
 
     # 扫描模块 Markdown
     for mod in target_modules:
@@ -249,7 +256,7 @@ def main():
             learning_status_counter[l_st if l_st in learning_status_counter else "未知"] += 1
             
             # 1. 结构质量
-            is_tech = mod in ["01-bigdata", "02-data-platform", "03-java-engineering"]
+            is_tech = mod in ["01-bigdata", "02-data-platform", "03-java-engineering", "08-interview-questions"]
             s_errs = verify_structural_quality(md_file, content, fm, is_tech)
             if s_errs:
                 structural_errors.append((rel_path, s_errs))
@@ -281,7 +288,7 @@ def main():
             for e in errs:
                 print(f"  ✖ {e}")
     else:
-        print("\n✔ [结构质量检查通过] 所有知识文档元数据完整，核心段落与大厂真题解答 100% 覆盖。")
+        print("\n✔ [结构质量检查通过] 必填元数据与受检章节齐全，技术题号和三层答案逐题匹配。")
 
     # 输出路径与引用检查结果
     if path_link_errors:

@@ -92,7 +92,7 @@ flowchart TB
 | **行级更新能力** | ❌ 不支持（仅追加） | ✅ 极强（追加版本，覆盖历史版本） | 较弱（ACID 表基于 Delta 文件，开销大） | ✅ 极强（**Unique MoW 写时合并**，零读放大） | ✅ 强（Format V2 支持 CoW 与 MoR） | ✅ 极强（**Partial-Update 零状态拼宽表**） | ✅ 强（CoW 重写与 MoR 增量追加） |
 | **典型查询延迟** | 分钟级（全表扫描需启动引擎） | **亚毫秒级 ~ 毫秒级（高并发点查极强）** | 分钟级 ~ 小时级（高吞吐重型批处理） | **毫秒级 ~ 亚秒级（高并发多维聚合第一）** | 秒级 ~ 数十秒（纯分析型查询） | 秒级（支持流读、批读与高效点查） | 秒级 ~ 分钟级（受限于索引与合并） |
 | **外部组件依赖** | 依赖 ZooKeeper（ZKFC 选主） | 强依赖 ZooKeeper 与 HDFS 底座 | 依赖 RDBMS（HMS）与计算引擎 | **零外部依赖（FE 内置 BDB-JE，BE 自管）** | 依赖 Catalog（REST/HMS/Nessie） | 依赖 Catalog（文件系统/HMS），无额外依赖 | 依赖 HMS 或自身元数据，依赖索引 |
-| **数据变更日志 (Changelog)** | ❌ 无 | 依靠 CDC 监控 WAL，机制重 | ❌ 无完整 Changelog | 依靠 Binlog 机制导出 | 依赖前后快照比对推导 | **原生四大模式（none/input/file/lookup）** | 基于 Timeline 增量视图计算 |
+| **数据变更日志 (Changelog)** | ❌ 无 | 依靠 CDC 监控 WAL，机制重 | ❌ 无完整 Changelog | 依靠 Binlog 机制导出 | 依赖前后快照比对推导 | **原生四大模式（none/input/full-compaction/lookup）** | 基于 Timeline 增量视图计算 |
 | **典型硬件与成本** | 高（3副本存储），EC 可降至 1.5 副本 | 较高（长驻大内存与高频 Compaction） | 适中（离线按需调度计算，批处理） | 极低（极简架构省运维，列存压缩高） | **极低（基于廉价对象存储 S3/OSS）** | **极低（替代昂贵 Kafka，释放 Flink 内存）** | 中等（需维护外置索引或 Flink 状态） |
 
 ---
@@ -118,7 +118,7 @@ flowchart TB
 ### 盲区四：对数据湖 Changelog 的“前镜像 `-U`”重要性认知缺失，导致下游数据翻倍
 - **认知纠偏**：很多工程师在配置 Paimon 时随意使用默认的 `none` 模式，认为“只要有最新值就行”。
 - **致命后果**：如果下游 Flink 作业包含 `SUM`、`COUNT` 等聚合运算，当数据由 100 变为 150 时，由于缺少 `-U(100)` 的撤回事件，下游流计算会将 150 直接累加到 100 上（变成 250），引发灾难性的财务指标失真。
-- **架构底线**：凡是下游需要流读并执行聚合运算的中间层表，必须强制开启 `'changelog-producer' = 'lookup'`。
+- **架构底线**：聚合需要能取得旧值。检查上游是否提供完整变更、表端是否生成前镜像，或者消费端能否按主键保存旧值。
 
 ### 盲区五：小文件治理陷入“治标不治本的人肉循环”
 - **认知纠偏**：小文件治理不是简单的“写个脚本天天去合并”。如果业务每天产生数百万小文件，光靠夜间合并是救不过来的。
@@ -151,20 +151,20 @@ flowchart TD
 
     subgraph StreamingLakehouse["2. 实时流批湖仓中枢 (Apache Paimon + Flink)"]
         Kafka_Ingest --> Flink_ETL["Flink 实时清洗与时序转换引擎"]
-        Flink_ETL -->|高吞吐流写 ('write-only'='true')| Paimon_ODS["Paimon ODS: 设备遥测全量镜像表<br/>(LSM 湖存储, 按日分区, 固定分桶)"]
-        Paimon_ODS -->|流读 Changelog ('lookup')| Flink_Wide["Flink 异步补齐设备台账维表"]
+        Flink_ETL -->|"高吞吐流写 ('write-only'='true')"| Paimon_ODS["Paimon ODS: 设备遥测全量镜像表<br/>(LSM 湖存储, 按日分区, 固定分桶)"]
+        Paimon_ODS -->|"流读 Changelog ('lookup')"| Flink_Wide["Flink 异步补齐设备台账维表"]
         Flink_Wide --> Paimon_DWS["Paimon DWS: 设备分钟级多流聚合宽表<br/>(Partial-Update 局部合并)"]
         Compaction_Pod["独立 Dedicated Compaction Job<br/>(专用弹性资源, 异步合并 L0 文件)"] -.-> Paimon_ODS
         Compaction_Pod -.-> Paimon_DWS
     end
 
     subgraph AnalyticalTier["3. 统一多维分析与实时报表加速 (Apache Doris 2.0+)"]
-        Paimon_DWS -->|微批极速摄入 (Stream Load)| Doris_Realtime["Doris 核心实时分析库 (FE/BE 极简架构)<br/>• 聚合模型 (Aggregate Key): 能耗预计算<br/>• 主键模型 (Unique MoW): 设备最新状态表<br/>• Pipeline 向量化执行引擎 + Runtime Filter"]
+        Paimon_DWS -->|"微批极速摄入 (Stream Load)"| Doris_Realtime["Doris 核心实时分析库 (FE/BE 极简架构)<br/>• 聚合模型 (Aggregate Key): 能耗预计算<br/>• 主键模型 (Unique MoW): 设备最新状态表<br/>• Pipeline 向量化执行引擎 + Runtime Filter"]
         Doris_Realtime -.->|Multi-Catalog 零拷贝直接读取| Paimon_DWS
     end
 
     subgraph ColdArchiveTier["4. 海量历史冷存与深度挖掘 (Iceberg + 对象存储 S3)"]
-        Paimon_ODS -->|定期快照转储 (超过 30 天数据)| Iceberg_Cold["Iceberg 归档表 (Format V2 + Parquet + ZSTD)<br/>底层持久化于云原生 S3 / HDFS 纠删码"]
+        Paimon_ODS -->|"定期快照转储 (超过 30 天数据)"| Iceberg_Cold["Iceberg 归档表 (Format V2 + Parquet + ZSTD)<br/>底层持久化于云原生 S3 / HDFS 纠删码"]
         Spark_ML["Spark ML / 深度挖掘引擎 (长周期算法模型训练)"] --> Iceberg_Cold
     end
 
@@ -212,10 +212,10 @@ flowchart TD
 
 ---
 
-## 5. 第二周综合能力盲测真题库（10 道大厂真实高频题）
+## 5. 第二周综合能力盲测真题库（10 道岗位练习题）
 
 > [!IMPORTANT]
-> 本板块精选一线大厂（阿里、字节、美团、腾讯、快手）真实高频考察的 10 道存储与湖仓核心大题。**在第 6 板块中已对全部题目进行逐题完整三层金字塔深度解答，题题必解，绝不留白！**
+> 本节为存储与湖仓的教学推演，带原帖的题目见 [Paimon 面经专项](../08-interview-questions/02-paimon.md)。
 
 ### 5.1 基础概念与存储底座题（大厂初筛）
 1. **Q1**：请深入对比 HDFS 纠删码（Erasure Coding, EC）与传统 3 副本机制的底层物理实现与性能权衡，为什么在生产热数据或高频随机追加场景中不推荐使用纠删码？
@@ -228,7 +228,7 @@ flowchart TD
 
 ### 5.3 现代数据湖技术深度题（大厂湖仓专家面）
 6. **Q6**：请在白板上画出 Apache Iceberg 的四层元数据树架构（Catalog、Metadata File、Manifest List、Manifest File），并详细推导一次查询如何实现文件级精准剪枝并彻底终结对象存储 Listing 瓶颈？
-7. **Q7**：什么是数据湖的 Changelog？请详细阐述 Apache Paimon 的四大 Changelog Producer 模式（none, input, file-lookup, lookup）的工作机制与适用场景。
+7. **Q7**：什么是数据湖的 Changelog？请详细阐述 Apache Paimon 的四大 Changelog Producer 模式（none, input, full-compaction, lookup）的工作机制与适用场景。
 
 ### 5.4 生产实战排障与架构设计题（技术总监/总架构师终面）
 8. **Q8（全链路小文件生产排障）**：生产集群出现大量小文件，同时拖垮了 NameNode 内存（HDFS）、引发了 Doris -235 版本堆积报错、并导致 Iceberg 查询出现严重长尾延迟。请给出全栈系统性的小文件根治与治理解决方案。
@@ -440,37 +440,19 @@ flowchart TD
 
 ---
 
-### 题目7（大厂资深·流式湖仓）：深入对比 Apache Paimon 与 Apache Hudi 在流式 Upsert 写入、索引依赖与多流拼宽表（Partial-Update）上的本质代际差异。
+### 题目7　Paimon 怎样把更新提供给下游？
 
-#### 简洁回答（1分钟电梯破题）：
-> “两者在流式湖仓架构上展现了**‘两代技术的演进鸿沟’**：
-> 1. **流式 Upsert 写入**：Hudi 写入时必须通过索引查找历史数据所在的 FileGroup，带来严重寻址开销；Paimon 底层采用 **LSM-Tree**，写入只做内存跳表排序并分层顺序落盘，**写吞吐是 Hudi 的 2~3 倍**；
-> 2. **索引依赖**：Hudi 强依赖外部/状态索引（Flink State Index 易导致内存爆炸）；Paimon 采用纯 LSM 分层与主键分桶，**完全零外置索引负担**；
-> 3. **多流拼宽表**：Hudi 依赖复杂的自定义 Payload，容易发生字段覆盖与并发冲突；Paimon 原生支持 **`partial-update` 引擎**，多流各自只写部分字段，由 LSM Compaction 自动异步合并，**彻底消灭了 Flink 极其沉重的 Join 状态内存**。”
+#### 简洁回答
 
-#### 深入回答（技术细节展开、底层机制与推导）：
-> “三大核心维度的深层物理机制对比：
-> 1. **流式 Upsert 与写入吞吐的本质差异**：
->    - **Hudi 的 MoR 写入瓶颈**：一条带有主键的更新数据到达，Hudi 必须先通过索引（如 BloomFilter 或 Flink State）定位出该主键之前落在了哪一个 File Group；然后向该 File Group 的 `.log` 文件追加。随着文件数暴涨，索引查找耗时不断增加；
->    - **Paimon 的 LSM 高速写入**：写入只需按照 `hash(pk) % bucket` 路由到分桶，数据直接进入内存 MemTable 排序落盘生成 Level 0 文件。**写入路径上没有任何读取历史数据的阻塞环节**，实现极高的流写入吞吐。
-> 2. **索引负担与系统稳定性（Zero Index vs Flink State Index）**：
->    - **Hudi 的 Flink State Index 隐患**：为了加速索引查找，Hudi 默认将全量 `Key -> FileID` 映射缓存在 Flink 的 RocksDB 状态中。当历史数据突破数亿时，RocksDB 堆外内存膨胀至数十 GB，频繁引发 TaskManager OOM-Killed；
->    - **Paimon 的零索引哲学**：Paimon 依靠 LSM-Tree 自身的有序性。文件内部自带主键索引与 BloomFilter，后台 Compaction 负责清理旧版本，Flink 节点无需常驻任何历史主键状态，内存消耗极小。
-> 3. **多流拼宽表（Partial-Update）的架构优势**：
->    - **传统 Flink 双流/多流 Join 痛点**：必须在 Flink 中开辟数百 GB 状态内存，迟到数据易导致宽表字段残缺，Checkpoint 频繁超时；
->    - **Paimon Partial-Update 解决方案**：
->      - 多个独立的 Flink 任务各自往同一张 Paimon 主键表写数据（每个流只负责写入自己拥有的列，其他列置 NULL）；
->      - Paimon 底层 LSM-Tree 在分层 Compaction 时，**自动依据主键将多流非空字段合并为完整单行**；
->      - **全链路计算端完全无状态，内存开销直降 90%**。”
+表记录当前值，Changelog 描述从旧值到新值的变化。订单金额 100 改成 80，汇总需要减去 20。消费者若只看到 80，就要能按主键找回旧值。
 
-#### 架构师/技术管理视角（降维升华、权衡取舍、SLA与成本）：
-> “在技术管理与大促保障体系中：
-> **‘把复杂的有状态计算转化为简单无状态的流写入，是现代数据架构进化的最高境界’**：
-> 过去我们在双十一大促期间，为了维系 Flink 多流 Join 拼宽表的大状态，通宵组织工程师值班监控 Checkpoint 超时报警，提心吊胆；
-> 全面演进至 Paimon 的 Partial-Update 架构后：
-> 1. **研发彻底解耦**：订单流、支付流、物流流由不同的业务小组独立开发维护，互不干扰；
-> 2. **稳定性产生质变**：Flink 状态从数百 GB 骤降至几十兆，Checkpoint 耗时从几分钟缩短至 **50 毫秒**，作业重启秒级拉起；
-> 3. **真正实现全链路流批一体**：同一套宽表既支持秒级流读，又支持 Doris/Trino 复杂全量批分析，展示出架构现代化升级带来的巨大管理红利。”
+#### 深入回答
+
+`none` 不生成额外的完整变更流，消费者可更新已有键或用状态恢复旧值。`input` 存储输入变更，前镜像的完整性依赖源头。`lookup` 在合并时查找旧值生成变化。`full-compaction` 比较相邻全合并的结果，中间变化可能折叠。[Paimon 变更日志](https://paimon.apache.org/docs/1.2/primary-key-table/changelog-producer/)
+
+#### 架构师/技术管理视角
+
+按“需要每笔动作、需要表状态变化、只查当前行”分别定义审计、聚合和维表契约。用改金额、改分组、删除和重放样本核对结果，再比较产出变化的延迟、合并 I/O 和消费者状态成本。
 
 ---
 

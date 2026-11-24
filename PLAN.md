@@ -10,6 +10,19 @@
 
 ---
 
+## 本轮面试准备目标
+
+按下表从原计划中取用已有时段。每次仍用 90 分钟，最后 15 分钟闭卷口述两题，5 分钟核对答案并记录真实错题。学完一个方向的标准是能把结论、运行机制和一次工程决策连贯地说出来。
+
+| 顺序 | 对应学习日 | 口述练习 |
+| --- | --- | --- |
+| 1 | Day 01–03 | [Flink](08-interview-questions/01-flink.md) |
+| 2 | Day 13 | [Paimon](08-interview-questions/02-paimon.md) |
+| 3 | Day 11 | [Doris](08-interview-questions/03-doris.md) |
+| 4 | Day 12、14 | [数据湖](08-interview-questions/04-data-lake.md) |
+| 5 | Day 22 | [JVM](08-interview-questions/05-jvm.md) |
+| 6 | Day 26 的服务设计与 Day 28 的综合复盘 | [Spring 框架](08-interview-questions/06-spring.md) |
+
 ## 阶段规划概览
 
 ```mermaid
@@ -47,7 +60,7 @@ journey
 | 天数 | 模块与主题 | 必学知识（核心必修·90分钟） | 进阶知识（拔高加分） | 拓展知识（前沿视野） | 每日90分钟核心产出与验收 |
 | :--- | :--- | :--- | :--- | :--- | :--- |
 | **Day 01** | Flink 运行架构与资源管理 | JobManager/TaskManager/Slot 概念；四层图演进（StreamGraph $\to$ JobGraph $\to$ ExecutionGraph $\to$ 物理执行）；Operator Chain 链化 6 大条件；Slot 内存切分与 CPU 软共享哲学 | DefaultScheduler 与自适应调度器（Adaptive Scheduler）机制；SlotSharingGroup 资源隔离与峰谷互补实现 | Flink 2.0 存算分离架构（Disaggregated State）演进趋势；K8s Operator 云原生弹性伸缩 | 能够脱稿默画四层图与组件拓扑；流畅口述 6 个链化条件与 Exit 137 排查三步法 |
-| **Day 02** | Flink 状态管理与 Checkpoint | Managed vs Raw 状态；KeyedState 与 OperatorState；ABS（异步分段快照）算法；Changelog 机制；两阶段提交（2PC）端到端 Exactly-Once 闭环 | RocksDB 状态后端本地内存调优（BlockCache / WriteBuffer）；增量 Checkpoint 状态文件元数据管理；大状态冷热分层 | 分布式快照对齐超时降级（Aligned $\to$ Unaligned Checkpoint）；跨可用区双活状态容灾 | 讲清从 Kafka 到 Flink 到 Sink 的 2PC 提交时序；掌握 Checkpoint 超时排查决策树 |
+| **Day 02** | Flink 状态管理与 Checkpoint | Managed vs Raw 状态；KeyedState 与 OperatorState；ABS（Asynchronous Barrier Snapshotting，异步屏障快照）算法；Changelog 机制；两阶段提交（2PC）端到端 Exactly-Once 闭环 | RocksDB 状态后端本地内存调优（BlockCache / WriteBuffer）；增量 Checkpoint 状态文件元数据管理；大状态冷热分层 | 分布式快照对齐超时降级（Aligned $\to$ Unaligned Checkpoint）；跨可用区双活状态容灾 | 讲清从 Kafka 到 Flink 到 Sink 的 2PC 提交时序；掌握 Checkpoint 超时排查决策树 |
 | **Day 03** | Flink 反压机制与窗口时间语义 | Credit-based 基于信用的流控机制；Netty 网络缓冲区传输水位；Watermark 生成机制与对齐；迟到数据三级保障（AllowedLateness / SideOutput） | 反压从下游往上游定位的方法（Web UI 反压看板识别转折点）；KeyBy 数据倾斜与加盐两阶段聚合方案 | 跨分区 Watermark 闲置源倾斜治理（Idleness Detection）；流批一体自适应时间语义 | 掌握生产级反压定位 3 步排查闭环；能写出加盐两阶段聚合代码骨架并推演 |
 | **Day 04** | Kafka 底层架构与高吞吐核心 | Broker/Topic/Partition/Replica 模型；顺序写磁盘与 OS PageCache；零拷贝机制（Sendfile / mmap）；ISR 副本同步与 HW/LEO 水位对齐 | 生产级 Producer 批量聚合参数配置（`batch.size`, `linger.ms`, `acks`）；Consumer 协调机制与 Coordinator 交互 | Kafka 3.6+ KRaft 架构彻底去 ZooKeeper 机制；分层存储（Tiered Storage）架构降本方案 | 能画出零拷贝内核态/用户态对比图；说透 Kafka 支撑百万 QPS 的四大底层原因 |
 | **Day 05** | Kafka 高可用容灾与幂等/事务 | Leader Epoch 机制与脑裂数据恢复；Producer 幂等性底层（PID + Sequence Number）；Kafka 事务机制与跨 Partition 事务协调者（Transaction Coordinator） | 生产级重平衡（Rebalance）诱因排查与规避；死信队列（DLQ）与非阻塞异步重试链路设计 | 跨机房多集群 MirrorMaker 2.0 / Confluent Replicator 双活容灾方案与网络带宽权衡 | 掌握 Kafka 消息不丢、不重、有序的三大边界约束；口述 Rebalance 优化实践 |
@@ -89,7 +102,7 @@ journey
 | 天数 | 模块与主题 | 必学知识（核心必修·90分钟） | 进阶知识（拔高加分） | 拓展知识（前沿视野） | 每日90分钟核心产出与验收 |
 | :--- | :--- | :--- | :--- | :--- | :--- |
 | **Day 22** | JVM 内存模型与垃圾回收调优 | JVM 运行时数据区（堆、元空间、虚拟机栈、本地方法栈、程序计数器）；JMM 内存模型（可见性、有序性、原子性）；G1 垃圾收集器核心原理（Region、Mixed GC、STW 根因） | ZGC 染色指针（Colored Pointers）与读屏障（Read Barrier）低延迟机制；频繁 Full GC 生产三步排查（jcmd / jstat / MAT 堆转储分析） | 堆外内存泄露排查与 Jemalloc 内存分配器应用；云原生环境容器 Exit 137 防御基线 | 掌握生产级 Full GC 与堆外内存排查路径；口述三色标记与并发漏标应对策略 |
-| **Day 23** | Java 并发编程与 JUC 核心机制 | CAS 与 ABA 问题；AQS 同步器底层原理（state 状态与双向 FIFO 队列）；线程池核心参数配置、线程生命周期与四种饱和拒绝策略 | synchronized 锁升级过程（无锁 $\to$ 偏向锁 $\to$ 轻量级锁 $\to$ 重量级锁）；CompletableFuture 异步编排与线程池动态调整 | 无锁队列 Disruptor 底层环形缓冲区（RingBuffer）设计；Java 21 虚拟线程（Virtual Threads）高并发架构 | 深入讲清 AQS 的 `acquire/release` 独占与共享模式协作机制；能设计动态线程池 |
+| **Day 23** | Java 并发编程与 JUC 核心机制 | CAS 与 ABA 问题；AQS 同步器底层原理（state 状态与双向 FIFO 队列）；线程池核心参数配置、线程生命周期与四种饱和拒绝策略 | synchronized 的无竞争路径与竞争时的锁膨胀（JDK 17 默认禁用偏向锁）；CompletableFuture 异步编排与线程池动态调整 | 无锁队列 Disruptor 底层环形缓冲区（RingBuffer）设计；Java 21 虚拟线程（Virtual Threads）高并发架构 | 深入讲清 AQS 的 `acquire/release` 独占与共享模式协作机制；能设计动态线程池 |
 | **Day 24** | 数据库底层与 PostgreSQL/MySQL 事务 | ACID 特性与事务隔离级别；MVCC 多版本并发控制（UndoLog 链条与 ReadView 机制）；InnoDB B+Tree 索引底层结构与最左前缀原则；行锁、间隙锁（Gap Lock）与临键锁（Next-Key Lock） | 长事务导致回滚段膨胀治理；死锁检测与排查（Deadlock Analysis）；深分页优化与联合索引覆盖优化策略 | 分库分表（ShardingSphere）选型与分布式事务折中；NewSQL（TiDB）分布式数据库架构 | 讲透 MVCC 的 ReadView 快照生成时机；熟练排查分析生产环境 SQL 慢查询与死锁 |
 | **Day 25** | Redis 高性能架构与分布式缓存 | 单线程模型与 I/O 多路复用（epoll）；核心数据结构底层实现（SDS、ziplist、dict、skiplist）；持久化机制（RDB 快照 + AOF 增量）；缓存三剑客（穿透、击穿、雪崩）防御架构 | 缓存与数据库一致性方案（延迟双删、Binlog 异步监听重试）；分布式锁实现机制与 Redlock 争议深度剖析 | Redis 7.0 Multi-Threaded I/O 演进；高可用哨兵（Sentinel）与集群（Cluster）分片拓扑 | 讲透高并发分布式锁的安全边界（守护线程续期、Lua 原子释放）；掌握双写一致性 |
 | **Day 26** | 分布式理论与微服务架构工程 | CAP 定理与 BASE 理论；Raft 共识算法（Leader 选举、日志复制、脑裂防范）；分布式事务三大方案（2PC / TCC / Saga / Seata 框架） | 微服务限流熔断与降级（Sentinel / Resilience4j）；分布式唯一 ID 生成方案（Snowflake 时钟回拨应对） | 跨数据中心分布式共识网络延迟权衡；Service Mesh（服务网格）通信与治理架构 | 深入讲透 Raft 算法脑裂应对与日志提交条件；对比 TCC 与 Saga 适用业务场景 |
